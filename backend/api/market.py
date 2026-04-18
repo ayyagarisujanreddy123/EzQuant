@@ -37,11 +37,10 @@ from backend.services.market_data import (
  
 router = APIRouter(prefix="/api/market", tags=["market"])
  
- 
+
 # --------------------------------------------------------------------------- #
 # Ticker search
 # --------------------------------------------------------------------------- #
- 
 @router.get("/search", response_model=TickerSearchResponse)
 def search_tickers(
     q: str = Query("", description="Search query (symbol or company name). Empty returns popular list."),
@@ -54,12 +53,11 @@ def search_tickers(
     """
     results = service.search_tickers(q, limit=limit)
     return TickerSearchResponse(query=q, results=results)
- 
+
  
 # --------------------------------------------------------------------------- #
 # OHLCV retrieval
 # --------------------------------------------------------------------------- #
- 
 @router.get("/ohlcv", response_model=OHLCVResponse)
 def get_ohlcv(
     symbol: str = Query(..., min_length=1, max_length=20, description="Ticker symbol, e.g. 'NVDA'"),
@@ -128,3 +126,4 @@ def get_ohlcv(
         )
  
     return response
+
