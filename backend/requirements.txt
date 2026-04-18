@@ -1,0 +1,20 @@
+# --- Web framework ---
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+ 
+# --- Validation / settings ---
+pydantic==2.9.2
+pydantic-settings==2.6.0
+ 
+# --- Market data ---
+# Newer yfinance uses curl_cffi to impersonate a browser's TLS fingerprint,
+# which is required since mid-2025 when Yahoo started blocking generic HTTP clients.
+yfinance>=0.2.65
+curl_cffi>=0.7.0
+pandas==2.2.3
+ 
+# --- Caching ---
+cachetools==5.5.0
+ 
+# --- Dev niceties ---
+python-dotenv==1.0.1
