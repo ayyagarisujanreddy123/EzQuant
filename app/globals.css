@@ -1,1 +1,89 @@
 @import "tailwindcss";
+
+@theme {
+  /* Backgrounds */
+  --color-bg-0: #0b0d12;
+  --color-bg-1: #10131b;
+  --color-bg-2: #161a25;
+  --color-bg-3: #1c2131;
+  --color-bg-4: #242a3c;
+
+  /* Borders */
+  --color-eq-border: rgba(255, 255, 255, 0.06);
+  --color-eq-border-2: rgba(255, 255, 255, 0.11);
+
+  /* Semantic colors */
+  --color-eq-green: #2dd4a0;
+  --color-eq-green-dim: rgba(45, 212, 160, 0.12);
+  --color-eq-red: #f87171;
+  --color-eq-red-dim: rgba(248, 113, 113, 0.12);
+  --color-eq-amber: #fbbf24;
+  --color-eq-amber-dim: rgba(251, 191, 36, 0.12);
+  --color-eq-blue: #60a5fa;
+  --color-eq-blue-dim: rgba(96, 165, 250, 0.12);
+
+  /* Text */
+  --color-eq-t1: #e8eaf0;
+  --color-eq-t2: #8b909e;
+  --color-eq-t3: #555a6a;
+
+  /* Accent (copilot) */
+  --color-eq-accent: #8b7dff;
+  --color-eq-accent-2: #6851ff;
+  --color-eq-accent-dim: rgba(139, 125, 255, 0.14);
+
+  /* Gemini cyan */
+  --color-eq-cyan: #22d3ee;
+  --color-eq-cyan-dim: rgba(34, 211, 238, 0.12);
+
+  /* Fonts (wired to next/font variables set on <html>) */
+  --font-sans: var(--font-sans-family), sans-serif;
+  --font-mono: var(--font-mono-family), monospace;
+
+  /* Animations (usable as animate-t1, animate-t2, animate-t3) */
+  --animate-t1: thinking-pulse 1.2s ease-in-out infinite;
+  --animate-t2: thinking-pulse 1.2s ease-in-out 0.2s infinite;
+  --animate-t3: thinking-pulse 1.2s ease-in-out 0.4s infinite;
+}
+
+@keyframes thinking-pulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
+:root {
+  --gemini: linear-gradient(135deg, #8b7dff 0%, #22d3ee 100%);
+}
+
+html,
+body {
+  height: 100%;
+  background: var(--color-bg-0);
+  color: var(--color-eq-t1);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+@utility bg-gemini {
+  background: var(--gemini);
+}
+
+@utility text-gemini {
+  background: var(--gemini);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  color: transparent;
+}
+
+@utility glow-cyan {
+  border-color: var(--color-eq-cyan);
+  box-shadow: 0 0 0 2px var(--color-eq-cyan-dim);
+}
+
+@utility glow-accent {
+  border-color: var(--color-eq-accent);
+  box-shadow: 0 0 0 2px var(--color-eq-accent-dim);
+}
