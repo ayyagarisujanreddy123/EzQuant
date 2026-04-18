@@ -58,6 +58,18 @@ export interface NodeData extends Record<string, unknown> {
   params: Record<string, string | number | boolean>
   quality?: DataQuality
   metrics?: Metrics
+  bars?: OhlcvBar[]
+  fetchError?: string
+}
+
+export interface OhlcvBar {
+  timestamp: string
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+  adj_close: number
 }
 
 export interface EdgeData extends Record<string, unknown> {

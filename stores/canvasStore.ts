@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { applyNodeChanges, applyEdgeChanges } from '@xyflow/react'
 import type { NodeChange, EdgeChange } from '@xyflow/react'
-import type { CanvasNode, CanvasEdge, BlockStatus } from '@/types'
+import type { CanvasNode, CanvasEdge, BlockStatus, NodeData } from '@/types'
 
 interface CanvasStore {
   nodes: CanvasNode[]
@@ -16,6 +16,7 @@ interface CanvasStore {
   setSelected: (id: string | null) => void
   setStatuses: (statuses: Record<string, BlockStatus>) => void
   updateParam: (nodeId: string, key: string, value: string | number | boolean) => void
+  patchNodeData: (nodeId: string, patch: Partial<NodeData>) => void
   clear: () => void
 }
 
@@ -49,6 +50,13 @@ export const useCanvasStore = create<CanvasStore>((set) => ({
         n.id === nodeId
           ? { ...n, data: { ...n.data, params: { ...n.data.params, [key]: value } } }
           : n
+      ),
+    })),
+
+  patchNodeData: (nodeId, patch) =>
+    set((s) => ({
+      nodes: s.nodes.map((n) =>
+        n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n
       ),
     })),
 

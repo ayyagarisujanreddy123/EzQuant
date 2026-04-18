@@ -2,7 +2,9 @@
 import { useState, useEffect } from 'react'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { CATALOG_BY_TYPE } from '@/lib/blocks/catalog'
-import type { CanvasNode } from '@/types'
+import { fetchOhlcv } from '@/lib/api/backend'
+import type { CanvasNode, DataQuality, OhlcvBar } from '@/types'
+import { Download, Loader2, Play } from 'lucide-react'
 
 type Tab = 'data' | 'params' | 'eval'
 
@@ -14,7 +16,8 @@ const TABS: { id: Tab; label: string }[] = [
 
 export function Inspector() {
   const [tab, setTab] = useState<Tab>('data')
-  const { nodes, selectedNodeId, updateParam } = useCanvasStore()
+  const { nodes, selectedNodeId, updateParam, patchNodeData, setStatuses } =
+    useCanvasStore()
   const node = nodes.find((n) => n.id === selectedNodeId)
 
   // Auto-switch to Params tab when a node is selected
@@ -49,7 +52,37 @@ export function Inspector() {
         ) : tab === 'data' ? (
           <DataTab node={node} />
         ) : tab === 'params' ? (
-          <ParamsTab node={node} updateParam={updateParam} />
+          <ParamsTab
+            node={node}
+            updateParam={updateParam}
+            onEvaluate={async () => {
+              if (node.data.blockType !== 'ticker_source') return
+              const p = node.data.params
+              setStatuses({ [node.id]: 'running' })
+              patchNodeData(node.id, { fetchError: undefined })
+              try {
+                const res = await fetchOhlcv({
+                  symbol: String(p.ticker ?? ''),
+                  interval: String(p.interval ?? '1d'),
+                  start: String(p.start_date ?? ''),
+                  end: String(p.end_date ?? ''),
+                })
+                const quality = barsToQuality(res.bars)
+                patchNodeData(node.id, {
+                  bars: res.bars,
+                  quality,
+                  fetchError: undefined,
+                })
+                setStatuses({ [node.id]: 'success' })
+                setTab('data')
+              } catch (err) {
+                const msg = err instanceof Error ? err.message : 'Fetch failed'
+                patchNodeData(node.id, { fetchError: msg, bars: undefined, quality: undefined })
+                setStatuses({ [node.id]: 'error' })
+                setTab('data')
+              }
+            }}
+          />
         ) : (
           <EvalTab node={node} />
         )}
@@ -60,9 +93,44 @@ export function Inspector() {
 
 function DataTab({ node }: { node: CanvasNode }) {
   const q = node.data.quality
+  const err = node.data.fetchError
+  const bars = node.data.bars
+  const isRunning = node.data.status === 'running'
+
+  const handleDownloadCsv = () => {
+    if (!bars?.length) return
+    const symbol = String(node.data.params.ticker ?? node.data.name ?? 'data')
+    downloadBarsAsCsv(bars, symbol)
+  }
+
   return (
     <div>
-      <div className="text-[11px] font-medium text-eq-t1 mb-2">{node.data.name}</div>
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-[11px] font-medium text-eq-t1 truncate">{node.data.name}</div>
+        {bars && bars.length > 0 && (
+          <button
+            type="button"
+            onClick={handleDownloadCsv}
+            title="Download CSV"
+            className="flex items-center gap-1 text-[9px] font-mono text-eq-cyan hover:text-eq-t1 border border-eq-cyan/30 hover:border-eq-cyan bg-eq-cyan-dim/50 rounded px-1.5 py-0.5 transition-colors"
+          >
+            <Download size={10} /> CSV
+          </button>
+        )}
+      </div>
+
+      {isRunning && (
+        <div className="flex items-center gap-1.5 text-[10px] text-eq-cyan py-2">
+          <Loader2 size={11} className="animate-spin" /> Fetching…
+        </div>
+      )}
+
+      {err && !isRunning && (
+        <div className="text-[10px] text-eq-red bg-eq-red-dim border border-eq-red/25 rounded px-2 py-1.5 mb-2 font-mono break-words">
+          {err}
+        </div>
+      )}
+
       {q ? (
         <>
           {[
@@ -91,7 +159,7 @@ function DataTab({ node }: { node: CanvasNode }) {
               {q.lookaheadRisk ? 'Check' : 'OK'}
             </span>
           </div>
-          {q.sparkline && (
+          {q.sparkline && q.sparkline.length > 1 && (
             <div className="mt-2 h-9 bg-bg-2 border border-eq-border rounded p-0.5">
               <svg width="100%" height="28" viewBox="0 0 100 28" preserveAspectRatio="none">
                 <polyline
@@ -110,7 +178,12 @@ function DataTab({ node }: { node: CanvasNode }) {
           )}
         </>
       ) : (
-        <p className="text-[10px] text-eq-t3 mt-2">No data quality info available</p>
+        !isRunning &&
+        !err && (
+          <p className="text-[10px] text-eq-t3 mt-2">
+            No data yet. Click <span className="text-eq-accent">Evaluate</span> in Params to fetch.
+          </p>
+        )
       )}
     </div>
   )
@@ -119,11 +192,16 @@ function DataTab({ node }: { node: CanvasNode }) {
 function ParamsTab({
   node,
   updateParam,
+  onEvaluate,
 }: {
   node: CanvasNode
   updateParam: (id: string, key: string, value: string | number | boolean) => void
+  onEvaluate: () => void | Promise<void>
 }) {
   const def = CATALOG_BY_TYPE[node.data.blockType]
+  const isTicker = node.data.blockType === 'ticker_source'
+  const isRunning = node.data.status === 'running'
+
   if (!def) return <p className="text-[10px] text-eq-t3">Unknown block type</p>
 
   return (
@@ -165,6 +243,25 @@ function ParamsTab({
           </div>
         )
       })}
+
+      {isTicker && (
+        <button
+          type="button"
+          onClick={onEvaluate}
+          disabled={isRunning}
+          className="mt-2 flex items-center justify-center gap-1.5 bg-eq-accent text-white text-[11px] font-medium py-1.5 rounded hover:bg-eq-accent-2 disabled:opacity-50 transition-colors"
+        >
+          {isRunning ? (
+            <>
+              <Loader2 size={12} className="animate-spin" /> Evaluating…
+            </>
+          ) : (
+            <>
+              <Play size={12} /> Evaluate
+            </>
+          )}
+        </button>
+      )}
     </div>
   )
 }
@@ -202,4 +299,63 @@ function EvalTab({ node }: { node: CanvasNode }) {
       ))}
     </div>
   )
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+function barsToQuality(bars: OhlcvBar[]): DataQuality {
+  if (!bars.length) {
+    return { rows: 0, dateRange: '—', missing: 0, nanCount: 0, lookaheadRisk: false }
+  }
+  const first = bars[0].timestamp.slice(2, 7) // "26-04" from "2026-04-18..."
+  const last = bars[bars.length - 1].timestamp.slice(2, 7)
+  const closes = bars.map((b) => b.close)
+  const min = Math.min(...closes)
+  const max = Math.max(...closes)
+  const range = max - min || 1
+  const targetSamples = 20
+  const step = Math.max(1, Math.floor(bars.length / targetSamples))
+  const sparkline: number[] = []
+  for (let i = 0; i < bars.length; i += step) {
+    sparkline.push((closes[i] - min) / range)
+  }
+  if (sparkline[sparkline.length - 1] !== (closes[closes.length - 1] - min) / range) {
+    sparkline.push((closes[closes.length - 1] - min) / range)
+  }
+  const missing = bars.filter((b) => b.close == null || Number.isNaN(b.close)).length
+  return {
+    rows: bars.length,
+    dateRange: `${first} → ${last}`,
+    missing,
+    nanCount: missing,
+    lookaheadRisk: false,
+    sparkline,
+  }
+}
+
+function downloadBarsAsCsv(bars: OhlcvBar[], symbol: string) {
+  const headers: (keyof OhlcvBar)[] = [
+    'timestamp',
+    'open',
+    'high',
+    'low',
+    'close',
+    'volume',
+    'adj_close',
+  ]
+  const lines = [
+    headers.join(','),
+    ...bars.map((b) => headers.map((h) => String(b[h] ?? '')).join(',')),
+  ]
+  const csv = lines.join('\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  const ts = new Date().toISOString().slice(0, 10)
+  a.download = `${symbol.toUpperCase()}_${ts}.csv`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
 }
