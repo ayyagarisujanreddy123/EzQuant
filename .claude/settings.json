@@ -1,0 +1,21 @@
+{
+  "plugins": [
+    "superpowers@claude-plugins-official",
+    "ui-ux-pro-max@ui-ux-pro-max-skill",
+    "claude-mem@thedotmack"
+  ],
+  "permissions": {
+    "allow": [
+      "Bash(npm:*)",
+      "Bash(npx:*)",
+      "Bash(git:*)",
+      "Bash(bun:*)",
+      "Bash(node:*)",
+      "Bash(python:*)",
+      "Bash(python3:*)"
+    ]
+  },
+  "env": {
+    "CLAUDE_MEM_PORT": "37777"
+  }
+}
