@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { CATALOG_BY_TYPE } from '@/lib/blocks/catalog'
 import type { CanvasNode } from '@/types'
@@ -16,6 +16,11 @@ export function Inspector() {
   const [tab, setTab] = useState<Tab>('data')
   const { nodes, selectedNodeId, updateParam } = useCanvasStore()
   const node = nodes.find((n) => n.id === selectedNodeId)
+
+  // Auto-switch to Params tab when a node is selected
+  useEffect(() => {
+    if (selectedNodeId) setTab('params')
+  }, [selectedNodeId])
 
   return (
     <div className="w-[180px] bg-bg-1 border-l border-eq-border flex-shrink-0 overflow-y-auto">
