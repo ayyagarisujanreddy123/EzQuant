@@ -36,14 +36,17 @@
   --color-eq-cyan: #22d3ee;
   --color-eq-cyan-dim: rgba(34, 211, 238, 0.12);
 
-  /* Fonts (wired to next/font variables set on <html>) */
-  --font-sans: var(--font-sans-family), sans-serif;
-  --font-mono: var(--font-mono-family), monospace;
-
   /* Animations (usable as animate-t1, animate-t2, animate-t3) */
   --animate-t1: thinking-pulse 1.2s ease-in-out infinite;
   --animate-t2: thinking-pulse 1.2s ease-in-out 0.2s infinite;
   --animate-t3: thinking-pulse 1.2s ease-in-out 0.4s infinite;
+}
+
+/* Dynamic values that reference CSS vars set at runtime (next/font).
+   `inline` keeps the var() live instead of snapshotting. */
+@theme inline {
+  --font-sans: var(--font-sans-family), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-mono-family), ui-monospace, monospace;
 }
 
 @keyframes thinking-pulse {
