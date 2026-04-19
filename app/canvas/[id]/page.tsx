@@ -38,19 +38,34 @@ export default function CanvasPage() {
   const [runError, setRunError] = useState<string | null>(null)
 
   useEffect(() => {
+    let cancelled = false
+    // Wipe any stale graph from a previously-open project before async load.
+    setNodes([])
+    setEdges([])
     fetchProject(id)
       .then((proj) => {
+        if (cancelled) return
         setProjectName(proj.name)
-        if (proj.graph) {
-          setNodes(proj.graph.nodes)
-          setEdges(proj.graph.edges)
+        const g = proj.graph
+        console.log('[canvas] loaded project', {
+          id,
+          name: proj.name,
+          nodeCount: g?.nodes?.length ?? 0,
+          edgeCount: g?.edges?.length ?? 0,
+        })
+        if (g && g.nodes && g.nodes.length > 0) {
+          setNodes(g.nodes)
+          setEdges(g.edges ?? [])
         }
       })
-      .catch(() => {
-        // Project not found in Supabase (e.g. bookmarked stale ID). Stay on empty canvas.
+      .catch((err) => {
+        if (cancelled) return
+        console.warn('[canvas] fetchProject failed', err)
         setProjectName('Untitled')
       })
-    return () => useCanvasStore.getState().clear()
+    return () => {
+      cancelled = true
+    }
   }, [id, setNodes, setEdges])
 
   const handleSave = useCallback(async () => {
@@ -165,9 +180,11 @@ export default function CanvasPage() {
           </div>
         )}
 
-        <div className="flex-1 grid grid-cols-[145px_1fr_180px] overflow-hidden min-h-0">
+        <div className="flex-1 flex overflow-hidden min-h-0">
           <BlockPalette />
-          <Canvas />
+          <div className="flex-1 min-w-0">
+            <Canvas />
+          </div>
           <Inspector />
           <CopilotPanel
             pageContext={ctx}

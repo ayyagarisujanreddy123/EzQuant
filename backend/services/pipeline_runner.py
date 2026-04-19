@@ -37,8 +37,10 @@ from backend.schemas.pipeline import (
 
 logger = logging.getLogger(__name__)
 
-# Maximum cells shipped in a df_preview: 50 rows × 10 cols.
-PREVIEW_MAX_ROWS = 50
+# df_preview caps. Rows sized for the Data-tab chart to span the full
+# Universe window, not just a slice. ~3000 daily bars = ~12 years.
+# Table rendering still slices to ~20 rows client-side.
+PREVIEW_MAX_ROWS = 3000
 PREVIEW_MAX_COLS = 10
 
 SOURCE_BLOCKS = {"universe", "csv_upload"}

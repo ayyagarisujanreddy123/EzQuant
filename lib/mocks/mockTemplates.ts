@@ -1,35 +1,39 @@
 import type { Template } from '@/types'
-import { MOCK_AAPL_GRAPH, MOCK_NVDA_GRAPH } from './mockCanvasState'
+import {
+  MOCK_AAPL_GRAPH,
+  MOCK_NVDA_GRAPH,
+  MOCK_SPY_DIAGNOSTICS_GRAPH,
+} from './mockCanvasState'
 
 export const MOCK_TEMPLATES: Template[] = [
   {
-    id: 'tpl-mom',
-    name: 'Momentum Signal',
-    description: 'EMA crossover on daily log returns with threshold',
+    id: 'tpl-mom-aapl',
+    name: 'AAPL Momentum',
+    description: 'EMA-20 on log returns → threshold position → backtest',
     accentColor: 'green',
     icon: '↗',
-    sharpe: 1.24,
-    blockCount: 5,
+    sharpe: 0.92,
+    blockCount: 6,
     graph: MOCK_AAPL_GRAPH,
   },
   {
-    id: 'tpl-pairs',
-    name: 'Pairs Trade',
-    description: 'Rolling correlation mean-reversion on two tickers',
+    id: 'tpl-mom-nvda',
+    name: 'NVDA Momentum',
+    description: 'Same pipeline on NVDA — illustrates ticker swapping',
     accentColor: 'blue',
-    icon: '↔',
-    sharpe: 0.89,
+    icon: '↗',
+    sharpe: 1.67,
     blockCount: 6,
     graph: MOCK_NVDA_GRAPH,
   },
   {
-    id: 'tpl-vol',
-    name: 'Vol Breakout',
-    description: 'Z-score vol regime filter with momentum entry',
+    id: 'tpl-spy-diagnostics',
+    name: 'SPY + IC Diagnostics',
+    description: 'Full signal-first: EMA signal + Forward Return + IC diagnostics',
     accentColor: 'amber',
-    icon: '⚡',
-    sharpe: 1.07,
-    blockCount: 7,
-    graph: MOCK_NVDA_GRAPH,
+    icon: '✦',
+    sharpe: 0.38,
+    blockCount: 8,
+    graph: MOCK_SPY_DIAGNOSTICS_GRAPH,
   },
 ]

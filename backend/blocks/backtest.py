@@ -19,8 +19,19 @@ def backtest(inputs: dict, params: dict) -> dict:
 
     if "position" not in df.columns:
         raise ValueError("Input DataFrame must contain a 'position' column")
+
+    # Self-heal: if requested return column is missing but we have Close prices,
+    # compute log_return on the fly. Saves users from having to wire an explicit
+    # Log Returns block just to run a backtest.
     if return_col not in df.columns:
-        raise ValueError(f"Return column {return_col!r} not in DataFrame {list(df.columns)}")
+        if "Close" in df.columns:
+            df["log_return"] = np.log(df["Close"] / df["Close"].shift(1))
+            return_col = "log_return"
+        else:
+            raise ValueError(
+                f"Return column {return_col!r} not in DataFrame {list(df.columns)} "
+                "and no 'Close' column to derive it from."
+            )
 
     # Lookahead guard: yesterday's position times today's return.
     raw_pnl = df["position"].shift(1) * df[return_col]

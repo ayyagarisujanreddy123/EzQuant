@@ -19,8 +19,16 @@ def position_sizer(inputs: dict, params: dict) -> dict:
         )
     if mode != "threshold":
         raise ValueError(f"mode must be 'threshold' or 'vol_target', got {mode!r}")
+
+    # If upstream didn't insert an explicit Signal block, auto-pick a feature.
     if "signal" not in df.columns:
-        raise ValueError("Input DataFrame must contain a 'signal' column")
+        candidates = [c for c in df.columns if c.startswith(("ema_", "momentum_"))]
+        if not candidates:
+            raise ValueError(
+                "position_sizer: no 'signal' column and no ema_* / momentum_* "
+                "column found. Insert a Signal block upstream."
+            )
+        df["signal"] = df[candidates[0]]
 
     upper = float(params.get("upper_threshold", 0))
     lower = float(params.get("lower_threshold", 0))
