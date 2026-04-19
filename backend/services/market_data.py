@@ -334,7 +334,6 @@ class MarketDataService:
  
 _service: Optional[MarketDataService] = None
  
- 
 def get_market_data_service() -> MarketDataService:
     """Lazy singleton. Built on first request, reused after."""
     global _service
@@ -348,3 +347,23 @@ def get_market_data_service() -> MarketDataService:
     )
     _service = MarketDataService(provider=provider)
     return _service
+
+def to_dataframe(response: OHLCVResponse) -> pd.DataFrame:
+    """
+    Convert an OHLCVResponse into a pandas DataFrame indexed by timestamp
+    (UTC), with columns: open, high, low, close, volume, adj_close.
+    """
+    if not response.bars:
+        return pd.DataFrame(columns=["open", "high", "low", "close", "volume", "adj_close"])
+ 
+    df = pd.DataFrame([{
+        "timestamp": b.timestamp,
+        "open": b.open,
+        "high": b.high,
+        "low": b.low,
+        "close": b.close,
+        "volume": b.volume,
+        "adj_close": b.adj_close,
+    } for b in response.bars])
+    df = df.set_index("timestamp").sort_index()
+    return df
