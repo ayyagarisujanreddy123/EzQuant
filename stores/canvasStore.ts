@@ -7,6 +7,8 @@ import type {
   BlockStatus,
   NodeData,
   NodeRunResult,
+  PipelineTemplate,
+  PipelineGraph,
 } from '@/types'
 
 interface CanvasStore {
@@ -37,16 +39,27 @@ interface CanvasStore {
   applyRunResults: (results: Record<string, NodeRunResult>) => void
   clearRunResults: () => void
 
+  /** Pending (copilot-suggested) additions awaiting user approval. */
+  pendingNodes: CanvasNode[]
+  pendingEdges: CanvasEdge[]
+  pendingTemplate: PipelineTemplate | null
+  stagePipelineTemplate: (template: PipelineTemplate) => void
+  applyStaged: () => void
+  rejectStaged: () => void
+
   clear: () => void
 }
 
-export const useCanvasStore = create<CanvasStore>((set) => ({
+export const useCanvasStore = create<CanvasStore>((set, get) => ({
   nodes: [],
   edges: [],
   selectedNodeId: null,
   runId: null,
   lastRunResults: {},
   isRunning: false,
+  pendingNodes: [],
+  pendingEdges: [],
+  pendingTemplate: null,
 
   setNodes: (nodes) => set({ nodes }),
   setEdges: (edges) => set({ edges }),
@@ -115,6 +128,47 @@ export const useCanvasStore = create<CanvasStore>((set) => ({
 
   clearRunResults: () => set({ lastRunResults: {}, runId: null }),
 
+  stagePipelineTemplate: (template) => {
+    const graph = (template.graph ?? {}) as PipelineGraph
+    const pn = (graph.nodes ?? []).map((n) => ({
+      ...n,
+      data: {
+        ...n.data,
+        source: 'copilot' as const,
+        status: (n.data.status ?? 'idle') as BlockStatus,
+        pending: true,
+      } as NodeData,
+    }))
+    const pe = (graph.edges ?? []).map((e) => ({
+      ...e,
+      data: { ...(e.data ?? {}), pending: true },
+    }))
+    set({ pendingNodes: pn, pendingEdges: pe, pendingTemplate: template })
+  },
+
+  applyStaged: () => {
+    const s = get()
+    if (s.pendingNodes.length === 0 && s.pendingEdges.length === 0) return
+    // Merge staged with existing, skipping duplicates by id.
+    const nodeIds = new Set(s.nodes.map((n) => n.id))
+    const edgeIds = new Set(s.edges.map((e) => e.id))
+    const newNodes = s.pendingNodes.filter((n) => !nodeIds.has(n.id))
+    const newEdges = s.pendingEdges.map((e) => ({
+      ...e,
+      data: { ...(e.data ?? {}), pending: false },
+    })).filter((e) => !edgeIds.has(e.id))
+    set({
+      nodes: [...s.nodes, ...newNodes],
+      edges: [...s.edges, ...newEdges],
+      pendingNodes: [],
+      pendingEdges: [],
+      pendingTemplate: null,
+    })
+  },
+
+  rejectStaged: () =>
+    set({ pendingNodes: [], pendingEdges: [], pendingTemplate: null }),
+
   clear: () =>
     set({
       nodes: [],
@@ -123,5 +177,8 @@ export const useCanvasStore = create<CanvasStore>((set) => ({
       runId: null,
       lastRunResults: {},
       isRunning: false,
+      pendingNodes: [],
+      pendingEdges: [],
+      pendingTemplate: null,
     }),
 }))

@@ -45,14 +45,18 @@ class Settings(BaseSettings):
     ohlcv_cache_ttl_historical_days: int = 30
 
     # --- Supabase (backend-side, never shipped to browser) ---
-    # supabase_url falls back to NEXT_PUBLIC_SUPABASE_URL so a single .env.local
-    # entry serves both frontend and backend.
     supabase_url: str = Field(
         default="",
         validation_alias=AliasChoices("SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL"),
     )
     supabase_service_role_key: str = ""
     supabase_jwt_secret: str = ""
+
+    # --- Gemini (agent + embeddings) ---
+    google_api_key: str = ""
+    gemini_model: str = "gemini-2.5-flash"
+    gemini_image_model: str = "gemini-2.5-flash-image"
+    gemini_embedding_model: str = "gemini-embedding-001"
 
     @property
     def cors_origins_list(self) -> List[str]:

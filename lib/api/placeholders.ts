@@ -1,56 +1,15 @@
 import type {
-  CopilotEvent,
   Project,
   PipelineGraph,
-  PageContext,
-  Attachment,
 } from '@/types'
 import { MOCK_NVDA_GRAPH } from '@/lib/mocks/mockCanvasState'
 import { createClient } from '@/lib/supabase/client'
 
-// ── Copilot (still mocked — TODO wire to POST /api/agent/chat SSE) ───────────
-export async function* streamCopilotChat(
-  message: string,
-  _pageContext: PageContext,
-  _attachments?: Attachment[]
-): AsyncGenerator<CopilotEvent> {
-  await delay(300)
-  const isStrategyRequest = /backtest|momentum|strategy|pipeline|template/i.test(message)
+// ── Copilot — real SSE stream via backend (replaces the prior mock) ─────────
+export { streamCopilotChat } from './copilot'
 
-  if (isStrategyRequest) {
-    yield { type: 'tool_use', tool: 'search_knowledge', summary: 'searching...' }
-    await delay(300)
-    yield { type: 'tool_result', tool: 'search_knowledge', summary: '3 templates · 0.4s' }
-    yield { type: 'tool_use', tool: 'get_live_market_data', summary: 'fetching...' }
-    await delay(300)
-    yield { type: 'tool_result', tool: 'get_live_market_data', summary: 'NVDA · 252 rows' }
-    yield { type: 'tool_use', tool: 'suggest_pipeline_template', summary: 'generating...' }
-    await delay(400)
-    yield { type: 'suggest_pipeline_template', graph: MOCK_NVDA_GRAPH }
-    yield { type: 'applied_banner' }
-    yield {
-      type: 'text',
-      content:
-        'I put together a 5-block pipeline — fetch NVDA, compute log returns, apply a 20-day EMA, threshold to positions, and backtest. Span=20 is a common starting point.',
-    }
-    yield {
-      type: 'citations',
-      citations: [
-        { num: 1, source: 'momentum_template' },
-        { num: 2, source: 'js_signals_ema' },
-      ],
-    }
-  } else {
-    yield { type: 'tool_use', tool: 'search_knowledge', summary: 'searching...' }
-    await delay(400)
-    yield { type: 'tool_result', tool: 'search_knowledge', summary: '4 chunks · 0.3s' }
-    yield {
-      type: 'text',
-      content: `Placeholder response for: "${message}". Wire to POST /api/agent/chat to get real responses.`,
-    }
-  }
-  yield { type: 'done' }
-}
+// Reference kept so the import stays live for any future fallback.
+void MOCK_NVDA_GRAPH
 
 // ── Projects (Supabase) ──────────────────────────────────────────────────────
 interface ProjectRow {
@@ -131,6 +90,12 @@ export async function createProject(input: {
     .single()
   if (error) throw error
   return rowToProject(data as ProjectRow)
+}
+
+export async function deleteProject(id: string): Promise<void> {
+  const sb = createClient()
+  const { error } = await sb.from('projects').delete().eq('id', id)
+  if (error) throw error
 }
 
 export async function saveProject(input: {

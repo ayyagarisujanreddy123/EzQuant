@@ -110,6 +110,8 @@ export interface NodeData extends Record<string, unknown> {
   bars?: OhlcvBar[]
   fetchError?: string
   lastResult?: NodeRunResult
+  /** True when node is a copilot suggestion awaiting user approval. */
+  pending?: boolean
 }
 
 export interface OhlcvBar {
@@ -190,6 +192,11 @@ export interface Citation {
   url?: string
 }
 
+export interface GeneratedImage {
+  mime: string
+  data_b64: string
+}
+
 export interface Message {
   id: string
   role: MessageRole
@@ -198,16 +205,27 @@ export interface Message {
   citations?: Citation[]
   appliedTemplate?: boolean
   attachmentNote?: string
+  images?: GeneratedImage[]
   timestamp: Date
+}
+
+/** Enriched template payload emitted by the agent's suggest_pipeline_template tool. */
+export interface PipelineTemplate {
+  name: string
+  description: string
+  rationale?: string
+  graph: PipelineGraph
 }
 
 export type CopilotEvent =
   | { type: 'text'; content: string }
-  | { type: 'tool_use'; tool: string; summary: string }
+  | { type: 'tool_use'; tool: string; summary: string; status?: 'running' | 'done' }
   | { type: 'tool_result'; tool: string; summary: string }
-  | { type: 'citations'; citations: Citation[] }
+  | { type: 'citations'; citations?: Citation[]; sources?: Citation[] }
   | { type: 'applied_banner' }
   | { type: 'suggest_pipeline_template'; graph: PipelineGraph }
+  | { type: 'pipeline_template'; template: PipelineTemplate }
+  | { type: 'image'; mime: string; data_b64: string }
   | { type: 'done' }
 
 export interface PageContext {
