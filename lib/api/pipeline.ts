@@ -5,7 +5,9 @@ import type {
   RunResponse,
 } from '@/types'
 import { createClient } from '@/lib/supabase/client'
-import { resolveBackendUrl } from './baseUrl'
+
+const BACKEND_URL =
+  process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8000'
 
 interface RunOptions {
   projectId?: string | null
@@ -32,7 +34,7 @@ export async function runPipeline(
     persist: options.persist ?? true,
   }
 
-  const res = await fetch(`${resolveBackendUrl()}/api/pipeline/run`, {
+  const res = await fetch(`${BACKEND_URL}/api/pipeline/run`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -52,7 +54,7 @@ export async function fetchRun(runId: string): Promise<RunResponse> {
   const token = await getAccessToken()
   if (!token) throw new Error('Not signed in.')
 
-  const res = await fetch(`${resolveBackendUrl()}/api/pipeline/runs/${runId}`, {
+  const res = await fetch(`${BACKEND_URL}/api/pipeline/runs/${runId}`, {
     headers: { Authorization: `Bearer ${token}` },
   })
   if (!res.ok) throw new Error(await safeErrorDetail(res))

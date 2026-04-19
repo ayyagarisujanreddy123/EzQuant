@@ -1,5 +1,7 @@
 import type { OhlcvBar } from '@/types'
-import { resolveBackendUrl } from './baseUrl'
+
+const BACKEND_URL =
+  process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8000'
 
 export interface OhlcvResponse {
   symbol: string
@@ -40,7 +42,7 @@ export async function fetchOhlcv(params: FetchOhlcvParams): Promise<OhlcvRespons
     q.set('end', `${params.end}T00:00:00`)
   }
 
-  const res = await fetch(`${resolveBackendUrl()}/api/market/ohlcv?${q.toString()}`, {
+  const res = await fetch(`${BACKEND_URL}/api/market/ohlcv?${q.toString()}`, {
     method: 'GET',
     headers: { Accept: 'application/json' },
   })
