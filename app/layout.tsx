@@ -15,8 +15,8 @@ const jetBrainsMono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'EzQuant',
-  description: 'Visual quant pipeline builder',
+  title: 'SignalTracer',
+  description: 'Visual quant pipeline builder — trace every signal from data to backtest.',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

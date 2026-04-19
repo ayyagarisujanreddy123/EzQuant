@@ -1,5 +1,5 @@
 """
-EzQuant backend — FastAPI entrypoint.
+SignalTracer backend — FastAPI entrypoint.
 
 Run locally:
     uvicorn app.main:app --reload --port 8000
@@ -28,10 +28,10 @@ def create_app() -> FastAPI:
     _configure_logging(settings.log_level)
 
     app = FastAPI(
-        title="EzQuant Backend",
+        title="SignalTracer Backend",
         version="0.1.0",
         description=(
-            "Backend for EzQuant — a visual quant workflow builder. "
+            "Backend for SignalTracer — a visual quant workflow builder. "
             "Provides market data, project/pipeline management, and agent endpoints."
         ),
     )

@@ -54,7 +54,7 @@ def all_declarations() -> List[gproto.FunctionDeclaration]:
     gproto.FunctionDeclaration(
         name="search_knowledge",
         description=(
-            "Retrieve passages from the EzQuant quant-research knowledge base. "
+            "Retrieve passages from the SignalTracer quant-research knowledge base. "
             "Use this for conceptual questions (what is IC, how does EMA work, "
             "what's a reasonable Sharpe) and for grounding recommendations. "
             "Returns ranked chunks with source + similarity score."
@@ -120,7 +120,7 @@ ALLOWED_BLOCKS = {
 
 
 _TEMPLATE_PROMPT = """\
-Produce a JSON pipeline template for the EzQuant canvas.
+Produce a JSON pipeline template for the SignalTracer canvas.
 
 GOAL: {goal}
 TICKER: {ticker}
@@ -157,7 +157,7 @@ RESPOND WITH A SINGLE JSON OBJECT matching:
     gproto.FunctionDeclaration(
         name="suggest_pipeline_template",
         description=(
-            "Build a validated EzQuant pipeline template matching the user's goal. "
+            "Build a validated SignalTracer pipeline template matching the user's goal. "
             "Returns a graph of block nodes + edges the canvas can stage as "
             "ghosted (pending) nodes for the user to approve."
         ),

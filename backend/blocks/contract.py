@@ -1,5 +1,5 @@
 """
-Uniform block contract for EzQuant computational blocks.
+Uniform block contract for SignalTracer computational blocks.
 
 Every block is a pure function: f(inputs: dict, params: dict) -> dict.
 The dict always has at least a "df" key; diagnostic blocks add "metrics",

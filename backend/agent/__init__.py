@@ -1,5 +1,5 @@
 """
-EzQuant agentic-RAG copilot package.
+SignalTracer agentic-RAG copilot package.
 
   embeddings.py   — Gemini text-embedding-004 (task-typed)
   ingestion.py    — PDF → chunks → embeddings → knowledge_chunks

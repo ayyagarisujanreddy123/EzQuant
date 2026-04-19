@@ -1,5 +1,5 @@
 """
-EzQuant block registry.
+SignalTracer block registry.
 
 The canvas executor looks up blocks by string name from BLOCK_REGISTRY and
 calls them with the uniform contract: f(inputs: dict, params: dict) -> dict.

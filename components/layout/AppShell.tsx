@@ -37,7 +37,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="h-screen flex flex-col bg-bg-0 overflow-hidden">
       <nav className="flex items-center gap-1 px-4 py-2.5 bg-bg-1 border-b border-eq-border flex-shrink-0">
         <span className="text-[13px] font-semibold text-eq-t1 mr-4 tracking-tight">
-          Ez<span className="text-gemini">Quant</span>
+          Signal<span className="text-gemini">Tracer</span>
         </span>
         {TABS.map((tab) => (
           <Link
@@ -64,7 +64,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             className="flex items-center gap-1.5 px-2.5 py-1 bg-eq-accent-dim text-eq-accent border border-eq-accent/25 rounded-md text-[11px] font-medium hover:bg-eq-accent/20 transition-colors"
           >
             <div className="w-1.5 h-1.5 rounded-full bg-eq-cyan" />
-            Quant Copilot
+            Bloom
           </button>
           {email && (
             <span

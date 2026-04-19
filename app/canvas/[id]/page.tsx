@@ -171,7 +171,7 @@ export default function CanvasPage() {
           )}
           <span className="text-eq-t3">/</span>
           <span className="text-[11px] text-eq-t3">
-            {nodes.length} blocks{isCopilotSuggested ? ' · gemini-suggested' : ''} ·{' '}
+            {nodes.length} blocks{isCopilotSuggested ? ' · bloom-suggested' : ''} ·{' '}
             {isRunning ? 'running…' : 'not yet run'}
           </span>
           <div className="ml-auto flex items-center gap-1.5">

@@ -1,10 +1,11 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
-import { Paperclip, Image as ImageIcon, RotateCcw, Send, X, Sparkles } from 'lucide-react'
+import { Paperclip, Image as ImageIcon, RotateCcw, Send, X } from 'lucide-react'
 import { useCopilot } from '@/hooks/useCopilot'
 import { MessageBubble } from './MessageBubble'
 import { ThinkingIndicator } from './ThinkingIndicator'
 import { AttachmentChip } from './AttachmentChip'
+import { BloomAvatar } from './BloomAvatar'
 import type { PageContext, Message, PipelineGraph, CopilotMode } from '@/types'
 
 interface Props {
@@ -43,8 +44,31 @@ export function CopilotPanel({
   const [draft, setDraft] = useState('')
   const [showSlash, setShowSlash] = useState(false)
   const [isOpen, setIsOpen] = useState(false)
+  const [showGreeting, setShowGreeting] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const threadRef = useRef<HTMLDivElement>(null)
+
+  // First-encounter greeting — show the speech bubble once per user (per
+  // browser), then persist a flag so it never nags again.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      if (localStorage.getItem('bloom_greeted')) return
+    } catch {
+      return
+    }
+    const t = setTimeout(() => setShowGreeting(true), 900)
+    return () => clearTimeout(t)
+  }, [])
+
+  const dismissGreeting = () => {
+    setShowGreeting(false)
+    try {
+      localStorage.setItem('bloom_greeted', '1')
+    } catch {
+      /* ignore */
+    }
+  }
 
   useEffect(() => {
     threadRef.current?.scrollTo({
@@ -128,12 +152,82 @@ export function CopilotPanel({
       {!isOpen && (
         <button
           type="button"
-          onClick={() => setIsOpen(true)}
-          aria-label="Open Quant Copilot"
-          className="fixed bottom-5 right-5 w-12 h-12 rounded-full bg-gemini text-white flex items-center justify-center shadow-xl shadow-black/50 hover:scale-105 active:scale-95 transition-transform z-50 border border-white/10"
+          onClick={() => {
+            setIsOpen(true)
+            dismissGreeting()
+          }}
+          aria-label="Open Bloom"
+          className="fixed bottom-5 right-5 w-14 h-14 rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-transform z-50"
         >
-          <Sparkles size={18} />
+          <span className="bloom-float inline-flex items-center justify-center rounded-full shadow-xl shadow-black/50">
+            <BloomAvatar size={56} active={isStreaming} />
+          </span>
+          <style>{`
+            .bloom-float {
+              animation: bloomFloat 4.8s ease-in-out infinite;
+            }
+            @keyframes bloomFloat {
+              0%, 100% { transform: translate(0, 0) rotate(-1.5deg); }
+              25%      { transform: translate(-2.5px, -4px) rotate(-3deg); }
+              50%      { transform: translate(0, -6px) rotate(0deg); }
+              75%      { transform: translate(2.5px, -4px) rotate(3deg); }
+            }
+            @media (prefers-reduced-motion: reduce) {
+              .bloom-float { animation: none; }
+            }
+          `}</style>
         </button>
+      )}
+
+      {/* First-encounter greeting — shows once, dismisses on click */}
+      {!isOpen && showGreeting && (
+        <div
+          className="fixed bottom-7 right-[84px] z-50 max-w-[240px] bloom-greet-enter"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="relative bg-bg-1 border border-eq-cyan/45 rounded-xl px-3.5 py-2.5 shadow-xl shadow-black/40">
+            <button
+              type="button"
+              onClick={dismissGreeting}
+              aria-label="Dismiss greeting"
+              className="absolute top-1 right-1 w-4 h-4 rounded flex items-center justify-center text-eq-t3 hover:text-eq-t1 hover:bg-bg-3 transition-colors"
+            >
+              <X size={10} />
+            </button>
+            <div className="text-[11.5px] font-semibold text-eq-t1 mb-0.5">
+              Hey! <span className="text-gemini">✦</span>
+            </div>
+            <div className="text-[11px] text-eq-t2 leading-relaxed pr-2">
+              How can I assist you today?
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setIsOpen(true)
+                dismissGreeting()
+              }}
+              className="mt-2 text-[10px] font-medium text-eq-cyan hover:text-eq-accent transition-colors"
+            >
+              Start chatting →
+            </button>
+            {/* Tail — pointing right toward the FAB */}
+            <div className="absolute right-[-7px] bottom-6 w-0 h-0 border-t-[7px] border-t-transparent border-b-[7px] border-b-transparent border-l-[7px] border-l-[rgba(34,211,238,0.45)]" />
+            <div className="absolute right-[-5px] bottom-6 w-0 h-0 border-t-[6px] border-t-transparent border-b-[6px] border-b-transparent border-l-[6px] border-l-bg-1" />
+          </div>
+          <style>{`
+            .bloom-greet-enter {
+              animation: bloomGreetIn 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+            }
+            @keyframes bloomGreetIn {
+              0% { opacity: 0; transform: translateY(6px) scale(0.92); }
+              100% { opacity: 1; transform: translateY(0) scale(1); }
+            }
+            @media (prefers-reduced-motion: reduce) {
+              .bloom-greet-enter { animation: none; }
+            }
+          `}</style>
+        </div>
       )}
 
       {/* Floating panel — opens on FAB click / ⌘K */}
@@ -141,11 +235,9 @@ export function CopilotPanel({
         <div className="fixed top-14 right-4 bottom-4 w-[340px] bg-bg-1 border border-eq-border-2 rounded-xl shadow-2xl shadow-black/50 flex flex-col overflow-hidden z-50 min-h-0">
           {/* Header */}
           <div className="flex items-center gap-2 px-3 py-2 bg-bg-2 border-b border-eq-border flex-shrink-0">
-            <div className="w-5 h-5 rounded-full bg-gemini flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">
-              ✦
-            </div>
+            <BloomAvatar size={22} active={isStreaming} />
             <div className="flex-1 min-w-0">
-              <div className="text-[12px] font-medium text-eq-t1">Quant Copilot</div>
+              <div className="text-[12px] font-medium text-eq-t1">Bloom</div>
               <div className="text-[9px] text-eq-t3 font-mono">{subtitle}</div>
             </div>
             <button
@@ -161,7 +253,7 @@ export function CopilotPanel({
               onClick={() => setIsOpen(false)}
               title="Close"
               className="w-5 h-5 rounded flex items-center justify-center text-eq-t3 hover:text-eq-t1 hover:bg-bg-3 transition-colors"
-              aria-label="Close Copilot"
+              aria-label="Close Bloom"
             >
               <X size={13} />
             </button>
