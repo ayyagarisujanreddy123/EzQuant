@@ -9,18 +9,33 @@ import { BottomDrawer } from '@/components/canvas/BottomDrawer'
 import { CopilotPanel } from '@/components/copilot/CopilotPanel'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { fetchProject, saveProject } from '@/lib/api/placeholders'
+import { runPipeline } from '@/lib/api/pipeline'
 import { MOCK_CANVAS_MESSAGES } from '@/lib/mocks/mockMessages'
-import type { PageContext, PipelineGraph } from '@/types'
+import type { PageContext, PipelineGraph, BlockStatus } from '@/types'
 import { Play, ChevronLeft, Loader2, Check } from 'lucide-react'
+
+function looksLikeUuid(s: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
+}
 
 export default function CanvasPage() {
   const router = useRouter()
   const params = useParams()
   const id = params.id as string
-  const { nodes, edges, setNodes, setEdges, setStatuses } = useCanvasStore()
+  const {
+    nodes,
+    edges,
+    setNodes,
+    setEdges,
+    setStatuses,
+    applyRunResults,
+    setIsRunning,
+    isRunning,
+    setRunId,
+  } = useCanvasStore()
   const [projectName, setProjectName] = useState('Untitled')
-  const [isRunning, setIsRunning] = useState(false)
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [runError, setRunError] = useState<string | null>(null)
 
   useEffect(() => {
     fetchProject(id)
@@ -50,20 +65,32 @@ export default function CanvasPage() {
     }
   }, [id, projectName, nodes, edges])
 
-  const handleRun = useCallback(() => {
-    if (nodes.length === 0) return
+  const handleRun = useCallback(async () => {
+    if (nodes.length === 0 || isRunning) return
+    setRunError(null)
     setIsRunning(true)
-    const runningStatuses = Object.fromEntries(
-      nodes.map((n) => [n.id, 'running' as const])
+    setStatuses(
+      Object.fromEntries(nodes.map((n) => [n.id, 'running' as BlockStatus]))
     )
-    setStatuses(runningStatuses)
-    nodes.forEach((n, i) => {
-      setTimeout(() => {
-        setStatuses({ [n.id]: 'success' })
-      }, 280 * (i + 1))
-    })
-    setTimeout(() => setIsRunning(false), 280 * (nodes.length + 1))
-  }, [nodes, setStatuses])
+    try {
+      const res = await runPipeline(
+        { nodes, edges },
+        { projectId: looksLikeUuid(id) ? id : null, persist: true }
+      )
+      applyRunResults(res.node_results)
+      setStatuses(res.statuses)
+      if (res.run_id) setRunId(res.run_id)
+      const topErr = res.errors.__pipeline__
+      if (topErr) setRunError(topErr)
+    } catch (err) {
+      setRunError(err instanceof Error ? err.message : String(err))
+      setStatuses(
+        Object.fromEntries(nodes.map((n) => [n.id, 'error' as BlockStatus]))
+      )
+    } finally {
+      setIsRunning(false)
+    }
+  }, [nodes, edges, id, isRunning, setStatuses, setIsRunning, applyRunResults, setRunId])
 
   const handlePipelineGenerated = useCallback(
     (graph: PipelineGraph) => {
@@ -131,6 +158,12 @@ export default function CanvasPage() {
             </button>
           </div>
         </div>
+
+        {runError && (
+          <div className="flex-shrink-0 px-4 py-2 bg-eq-red-dim border-b border-eq-red/30 text-[11px] text-eq-red font-mono">
+            {runError}
+          </div>
+        )}
 
         <div className="flex-1 grid grid-cols-[145px_1fr_180px] overflow-hidden min-h-0">
           <BlockPalette />

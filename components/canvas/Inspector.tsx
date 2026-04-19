@@ -1,9 +1,11 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
+import { useParams } from 'next/navigation'
 import { useCanvasStore } from '@/stores/canvasStore'
-import { CATALOG_BY_TYPE } from '@/lib/blocks/catalog'
-import { fetchOhlcv } from '@/lib/api/backend'
-import type { CanvasNode, DataQuality, OhlcvBar } from '@/types'
+import { CATALOG_BY_TYPE, EXECUTABLE_BLOCK_TYPES } from '@/lib/blocks/catalog'
+import { runPipeline } from '@/lib/api/pipeline'
+import type { CanvasNode, Diagnostics, Metrics } from '@/types'
 import { Download, Loader2, Play } from 'lucide-react'
 
 type Tab = 'data' | 'params' | 'eval'
@@ -14,16 +16,54 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'eval', label: 'Eval' },
 ]
 
+function looksLikeUuid(s: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
+}
+
 export function Inspector() {
   const [tab, setTab] = useState<Tab>('data')
-  const { nodes, selectedNodeId, updateParam, patchNodeData, setStatuses } =
+  const { nodes, edges, selectedNodeId, updateParam, applyRunResults, setStatuses, isRunning, setIsRunning } =
     useCanvasStore()
   const node = nodes.find((n) => n.id === selectedNodeId)
+  const router = useRouter()
+  const params = useParams()
+  const pageProjectId = (params?.id as string) ?? null
 
-  // Auto-switch to Params tab when a node is selected
   useEffect(() => {
     if (selectedNodeId) setTab('params')
   }, [selectedNodeId])
+
+  const handleEvaluate = useCallback(async () => {
+    if (!node) return
+    if (!EXECUTABLE_BLOCK_TYPES.has(node.data.blockType)) return
+
+    setIsRunning(true)
+    setStatuses({ [node.id]: 'running' })
+    try {
+      const res = await runPipeline(
+        { nodes, edges },
+        {
+          projectId: pageProjectId && looksLikeUuid(pageProjectId) ? pageProjectId : null,
+          runTo: node.id,
+          persist: false,
+        }
+      )
+      applyRunResults(res.node_results)
+      setStatuses(res.statuses)
+      setTab('data')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Evaluate failed'
+      applyRunResults({
+        [node.id]: { node_id: node.id, status: 'error', error: msg },
+      })
+      setStatuses({ [node.id]: 'error' })
+    } finally {
+      setIsRunning(false)
+    }
+  }, [node, nodes, edges, pageProjectId, applyRunResults, setStatuses, setIsRunning])
+
+  // silence unused lint for router if not used yet
+  void router
 
   return (
     <div className="w-[180px] bg-bg-1 border-l border-eq-border flex-shrink-0 overflow-y-auto">
@@ -55,33 +95,8 @@ export function Inspector() {
           <ParamsTab
             node={node}
             updateParam={updateParam}
-            onEvaluate={async () => {
-              if (node.data.blockType !== 'ticker_source') return
-              const p = node.data.params
-              setStatuses({ [node.id]: 'running' })
-              patchNodeData(node.id, { fetchError: undefined })
-              try {
-                const res = await fetchOhlcv({
-                  symbol: String(p.ticker ?? ''),
-                  interval: String(p.interval ?? '1d'),
-                  start: String(p.start_date ?? ''),
-                  end: String(p.end_date ?? ''),
-                })
-                const quality = barsToQuality(res.bars)
-                patchNodeData(node.id, {
-                  bars: res.bars,
-                  quality,
-                  fetchError: undefined,
-                })
-                setStatuses({ [node.id]: 'success' })
-                setTab('data')
-              } catch (err) {
-                const msg = err instanceof Error ? err.message : 'Fetch failed'
-                patchNodeData(node.id, { fetchError: msg, bars: undefined, quality: undefined })
-                setStatuses({ [node.id]: 'error' })
-                setTab('data')
-              }
-            }}
+            onEvaluate={handleEvaluate}
+            isRunning={isRunning}
           />
         ) : (
           <EvalTab node={node} />
@@ -91,28 +106,24 @@ export function Inspector() {
   )
 }
 
+// ─── Data tab ────────────────────────────────────────────────────────────────
+
 function DataTab({ node }: { node: CanvasNode }) {
   const q = node.data.quality
   const err = node.data.fetchError
-  const bars = node.data.bars
+  const preview = node.data.lastResult?.df_preview
   const isRunning = node.data.status === 'running'
-
-  const handleDownloadCsv = () => {
-    if (!bars?.length) return
-    const symbol = String(node.data.params.ticker ?? node.data.name ?? 'data')
-    downloadBarsAsCsv(bars, symbol)
-  }
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between mb-2 gap-2">
         <div className="text-[11px] font-medium text-eq-t1 truncate">{node.data.name}</div>
-        {bars && bars.length > 0 && (
+        {preview && preview.rows.length > 0 && (
           <button
             type="button"
-            onClick={handleDownloadCsv}
-            title="Download CSV"
-            className="flex items-center gap-1 text-[9px] font-mono text-eq-cyan hover:text-eq-t1 border border-eq-cyan/30 hover:border-eq-cyan bg-eq-cyan-dim/50 rounded px-1.5 py-0.5 transition-colors"
+            onClick={() => downloadPreviewAsCsv(preview, node.data.name || 'data')}
+            title="Download preview as CSV"
+            className="flex items-center gap-1 text-[9px] font-mono text-eq-cyan hover:text-eq-t1 border border-eq-cyan/30 hover:border-eq-cyan bg-eq-cyan-dim/50 rounded px-1.5 py-0.5 transition-colors flex-shrink-0"
           >
             <Download size={10} /> CSV
           </button>
@@ -121,7 +132,7 @@ function DataTab({ node }: { node: CanvasNode }) {
 
       {isRunning && (
         <div className="flex items-center gap-1.5 text-[10px] text-eq-cyan py-2">
-          <Loader2 size={11} className="animate-spin" /> Fetching…
+          <Loader2 size={11} className="animate-spin" /> Running…
         </div>
       )}
 
@@ -131,7 +142,7 @@ function DataTab({ node }: { node: CanvasNode }) {
         </div>
       )}
 
-      {q ? (
+      {q && (
         <>
           {[
             ['Rows', q.rows.toLocaleString()],
@@ -147,18 +158,6 @@ function DataTab({ node }: { node: CanvasNode }) {
               <span className="text-[10px] font-mono text-eq-t1">{String(value)}</span>
             </div>
           ))}
-          <div className="flex justify-between items-center py-1 border-b border-eq-border">
-            <span className="text-[10px] text-eq-t2">Lookahead</span>
-            <span
-              className={`text-[9px] px-1.5 py-0.5 rounded ${
-                q.lookaheadRisk
-                  ? 'bg-eq-amber-dim text-eq-amber'
-                  : 'bg-eq-green-dim text-eq-green'
-              }`}
-            >
-              {q.lookaheadRisk ? 'Check' : 'OK'}
-            </span>
-          </div>
           {q.sparkline && q.sparkline.length > 1 && (
             <div className="mt-2 h-9 bg-bg-2 border border-eq-border rounded p-0.5">
               <svg width="100%" height="28" viewBox="0 0 100 28" preserveAspectRatio="none">
@@ -177,35 +176,74 @@ function DataTab({ node }: { node: CanvasNode }) {
             </div>
           )}
         </>
-      ) : (
-        !isRunning &&
-        !err && (
-          <p className="text-[10px] text-eq-t3 mt-2">
-            No data yet. Click <span className="text-eq-accent">Evaluate</span> in Params to fetch.
-          </p>
-        )
+      )}
+
+      {preview && (
+        <div className="mt-3">
+          <div className="text-[9px] font-mono uppercase tracking-wider text-eq-t3 mb-1">
+            Preview · {preview.shape[0]}×{preview.shape[1]}
+          </div>
+          <div className="max-h-48 overflow-auto border border-eq-border rounded">
+            <table className="w-full text-[9px] font-mono">
+              <thead className="sticky top-0 bg-bg-2">
+                <tr>
+                  {preview.columns.map((c) => (
+                    <th key={c} className="px-1 py-0.5 text-eq-t3 text-left border-b border-eq-border whitespace-nowrap">
+                      {c}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {preview.rows.slice(0, 20).map((row, i) => (
+                  <tr key={i} className="border-b border-eq-border/60">
+                    {row.map((v, j) => (
+                      <td key={j} className="px-1 py-0.5 text-eq-t2 whitespace-nowrap">
+                        {formatPreviewCell(v)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {!q && !preview && !isRunning && !err && (
+        <p className="text-[10px] text-eq-t3 mt-2">
+          No data yet. Click <span className="text-eq-accent">Evaluate</span> in Params to fetch.
+        </p>
       )}
     </div>
   )
 }
 
+// ─── Params tab ──────────────────────────────────────────────────────────────
+
 function ParamsTab({
   node,
   updateParam,
   onEvaluate,
+  isRunning,
 }: {
   node: CanvasNode
   updateParam: (id: string, key: string, value: string | number | boolean) => void
   onEvaluate: () => void | Promise<void>
+  isRunning: boolean
 }) {
   const def = CATALOG_BY_TYPE[node.data.blockType]
-  const isTicker = node.data.blockType === 'ticker_source'
-  const isRunning = node.data.status === 'running'
+  const isExecutable = EXECUTABLE_BLOCK_TYPES.has(node.data.blockType)
 
   if (!def) return <p className="text-[10px] text-eq-t3">Unknown block type</p>
 
   return (
     <div className="flex flex-col gap-2">
+      {def.stretch && (
+        <div className="text-[10px] text-eq-amber bg-eq-amber-dim border border-eq-amber/25 rounded px-2 py-1.5 font-mono">
+          Stretch block — no backend executor. Evaluate / Run will skip it.
+        </div>
+      )}
       {def.paramsSchema.map((schema) => {
         const current = node.data.params[schema.key] ?? schema.default
         return (
@@ -244,7 +282,7 @@ function ParamsTab({
         )
       })}
 
-      {isTicker && (
+      {isExecutable && (
         <button
           type="button"
           onClick={onEvaluate}
@@ -266,25 +304,35 @@ function ParamsTab({
   )
 }
 
+// ─── Eval tab ────────────────────────────────────────────────────────────────
+
 function EvalTab({ node }: { node: CanvasNode }) {
-  const m = node.data.metrics
-  if (!m)
-    return (
-      <p className="text-[9px] text-eq-t3 text-center mt-4">
-        Run pipeline to populate
-      </p>
-    )
+  const bt = node.data.blockType
+  if (bt === 'signal_diagnostics' && node.data.diagnostics) {
+    return <DiagnosticsCards d={node.data.diagnostics} />
+  }
+  if (bt === 'backtest' && node.data.metrics) {
+    return <BacktestCards m={node.data.metrics} />
+  }
+  return (
+    <p className="text-[9px] text-eq-t3 text-center mt-4">
+      Evaluate or Run this node to populate metrics.
+    </p>
+  )
+}
+
+function BacktestCards({ m }: { m: Metrics }) {
+  const sharpe = m.sharpe ?? 0
+  const dd = m.maxDrawdown ?? m.max_drawdown ?? 0
+  const tr = m.totalReturn ?? m.total_return ?? 0
+  const hit = m.winRate ?? m.hit_rate ?? 0
   return (
     <div className="grid grid-cols-2 gap-1.5">
       {[
-        { label: 'Sharpe', value: m.sharpe.toFixed(2), pos: m.sharpe > 0 },
-        { label: 'Max DD', value: `${(m.maxDrawdown * 100).toFixed(1)}%`, pos: false },
-        { label: 'Return', value: `${(m.totalReturn * 100).toFixed(1)}%`, pos: m.totalReturn > 0 },
-        {
-          label: 'Ann Ret',
-          value: `${(m.annualizedReturn * 100).toFixed(1)}%`,
-          pos: m.annualizedReturn > 0,
-        },
+        { label: 'Sharpe', value: sharpe.toFixed(2), pos: sharpe > 0 },
+        { label: 'Max DD', value: `${(dd * 100).toFixed(1)}%`, pos: false },
+        { label: 'Total Ret', value: `${(tr * 100).toFixed(1)}%`, pos: tr > 0 },
+        { label: 'Hit Rate', value: `${(hit * 100).toFixed(1)}%`, pos: hit > 0.5 },
       ].map(({ label, value, pos }) => (
         <div key={label} className="bg-bg-2 border border-eq-border rounded p-1.5">
           <div className="text-[8px] text-eq-t3 uppercase tracking-wider mb-0.5">
@@ -297,65 +345,139 @@ function EvalTab({ node }: { node: CanvasNode }) {
           </div>
         </div>
       ))}
+      {m.n_trades !== undefined && (
+        <div className="col-span-2 text-[9px] font-mono text-eq-t3">
+          {m.n_trades} trades · avg hold {m.avg_holding_period?.toFixed(1) ?? '?'} bars
+        </div>
+      )}
     </div>
   )
 }
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
+function DiagnosticsCards({ d }: { d: Diagnostics }) {
+  const icColor =
+    d.ic > 0.02 ? 'text-eq-green' : d.ic >= 0 ? 'text-eq-amber' : 'text-eq-red'
 
-function barsToQuality(bars: OhlcvBar[]): DataQuality {
-  if (!bars.length) {
-    return { rows: 0, dateRange: '—', missing: 0, nanCount: 0, lookaheadRisk: false }
-  }
-  const first = bars[0].timestamp.slice(2, 7) // "26-04" from "2026-04-18..."
-  const last = bars[bars.length - 1].timestamp.slice(2, 7)
-  const closes = bars.map((b) => b.close)
-  const min = Math.min(...closes)
-  const max = Math.max(...closes)
-  const range = max - min || 1
-  const targetSamples = 20
-  const step = Math.max(1, Math.floor(bars.length / targetSamples))
-  const sparkline: number[] = []
-  for (let i = 0; i < bars.length; i += step) {
-    sparkline.push((closes[i] - min) / range)
-  }
-  if (sparkline[sparkline.length - 1] !== (closes[closes.length - 1] - min) / range) {
-    sparkline.push((closes[closes.length - 1] - min) / range)
-  }
-  const missing = bars.filter((b) => b.close == null || Number.isNaN(b.close)).length
-  return {
-    rows: bars.length,
-    dateRange: `${first} → ${last}`,
-    missing,
-    nanCount: missing,
-    lookaheadRisk: false,
-    sparkline,
-  }
+  const horizons = Object.keys(d.ic_decay)
+    .map((k) => [Number(k), d.ic_decay[k]] as [number, number])
+    .sort((a, b) => a[0] - b[0])
+  const decayMax = Math.max(0.01, ...horizons.map(([, v]) => Math.abs(v || 0)))
+
+  const months = Object.entries(d.ic_stability)
+    .sort(([a], [b]) => a.localeCompare(b))
+  const monthMax = Math.max(0.01, ...months.map(([, v]) => Math.abs(v || 0)))
+
+  return (
+    <div className="flex flex-col gap-2.5">
+      {/* IC value */}
+      <div className="bg-bg-2 border border-eq-border rounded p-2">
+        <div className="text-[8px] text-eq-t3 uppercase tracking-wider mb-0.5">IC · n={d.n}</div>
+        <div className={`text-[22px] font-light font-mono ${icColor}`}>
+          {Number.isFinite(d.ic) ? d.ic.toFixed(3) : '—'}
+        </div>
+        <div className="text-[9px] text-eq-t3 font-mono">
+          t-stat {Number.isFinite(d.ic_tstat) ? d.ic_tstat.toFixed(2) : '—'}
+        </div>
+      </div>
+
+      {/* IC Decay bars */}
+      {horizons.length > 0 && (
+        <div>
+          <div className="text-[9px] font-mono uppercase tracking-wider text-eq-t3 mb-1">
+            IC Decay
+          </div>
+          <div className="flex items-end gap-1 h-14 bg-bg-2 border border-eq-border rounded p-1">
+            {horizons.map(([h, v]) => {
+              const mag = Math.abs(v || 0) / decayMax
+              const color = v >= 0 ? 'bg-eq-green' : 'bg-eq-red'
+              return (
+                <div key={h} className="flex-1 flex flex-col items-center justify-end">
+                  <div
+                    className={`w-full rounded-sm ${color}`}
+                    style={{ height: `${Math.max(2, mag * 42)}px` }}
+                    title={`h=${h}: ${v?.toFixed(3) ?? 'NaN'}`}
+                  />
+                  <div className="text-[7px] text-eq-t3 font-mono mt-0.5">{h}</div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Stability heatmap */}
+      {months.length > 0 && (
+        <div>
+          <div className="text-[9px] font-mono uppercase tracking-wider text-eq-t3 mb-1">
+            IC Stability ({months.length} mo)
+          </div>
+          <div className="flex flex-wrap gap-0.5 bg-bg-2 border border-eq-border rounded p-1">
+            {months.map(([ym, v]) => {
+              const mag = Math.min(1, Math.abs(v || 0) / monthMax)
+              const hue = v >= 0 ? '140' : '0'
+              return (
+                <div
+                  key={ym}
+                  title={`${ym}: ${v?.toFixed(3) ?? 'NaN'}`}
+                  className="w-3 h-3 rounded-sm"
+                  style={{ background: `hsl(${hue}, 60%, ${20 + mag * 40}%)` }}
+                />
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Autocorr */}
+      <div className="flex items-center justify-between py-1 border-t border-eq-border">
+        <span className="text-[10px] text-eq-t2">Autocorr</span>
+        <span className="text-[10px] font-mono text-eq-t1">
+          {Number.isFinite(d.signal_autocorr) ? d.signal_autocorr.toFixed(3) : '—'}
+        </span>
+      </div>
+    </div>
+  )
 }
 
-function downloadBarsAsCsv(bars: OhlcvBar[], symbol: string) {
-  const headers: (keyof OhlcvBar)[] = [
-    'timestamp',
-    'open',
-    'high',
-    'low',
-    'close',
-    'volume',
-    'adj_close',
-  ]
+// ─── CSV helper ──────────────────────────────────────────────────────────────
+
+function formatPreviewCell(v: unknown): string {
+  if (v === null || v === undefined) return ''
+  if (typeof v === 'number') return Number.isInteger(v) ? String(v) : v.toFixed(4)
+  const s = String(v)
+  return s.length > 24 ? s.slice(0, 22) + '…' : s
+}
+
+function downloadPreviewAsCsv(
+  preview: { columns: string[]; rows: unknown[][] },
+  baseName: string
+) {
   const lines = [
-    headers.join(','),
-    ...bars.map((b) => headers.map((h) => String(b[h] ?? '')).join(',')),
+    preview.columns.join(','),
+    ...preview.rows.map((r) =>
+      r
+        .map((v) =>
+          v === null || v === undefined
+            ? ''
+            : typeof v === 'string' && v.includes(',')
+            ? `"${v.replace(/"/g, '""')}"`
+            : String(v)
+        )
+        .join(',')
+    ),
   ]
   const csv = lines.join('\n')
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  const ts = new Date().toISOString().slice(0, 10)
-  a.download = `${symbol.toUpperCase()}_${ts}.csv`
+  a.download = `${sanitize(baseName)}_${new Date().toISOString().slice(0, 10)}.csv`
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
   URL.revokeObjectURL(url)
+}
+
+function sanitize(s: string): string {
+  return s.replace(/[^a-zA-Z0-9-_]/g, '_').slice(0, 40) || 'export'
 }

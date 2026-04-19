@@ -30,8 +30,9 @@ from typing import List, Optional, Tuple
 import pandas as pd
 import yfinance as yf
 from cachetools import TTLCache
- 
+
 from backend.core.config import get_settings
+from backend.services.supabase_client import get_service_client
 from backend.schemas.market import (
     Interval,
     OHLCVBar,
@@ -299,14 +300,22 @@ class MarketDataService:
         start: Optional[datetime] = None,
         end: Optional[datetime] = None,
     ) -> OHLCVResponse:
+        # 1. In-memory cache (hot path — same process).
         cache, key = self._ohlcv_cache_and_key(symbol, interval, period, start, end)
- 
         if key in cache:
             cached: OHLCVResponse = cache[key]
             return cached.model_copy(update={"cache_hit": True})
- 
+
+        # 2. Persistent Supabase cache (warm path — across restarts).
+        persisted = _persistent_cache_get(symbol, interval, period, start, end)
+        if persisted is not None:
+            cache[key] = persisted
+            return persisted.model_copy(update={"cache_hit": True})
+
+        # 3. Miss — hit the provider.
         response = self.provider.get_ohlcv(symbol, interval, period=period, start=start, end=end)
         cache[key] = response
+        _persistent_cache_put(symbol, interval, period, start, end, response)
         return response
  
     def _ohlcv_cache_and_key(
@@ -347,6 +356,111 @@ def get_market_data_service() -> MarketDataService:
     )
     _service = MarketDataService(provider=provider)
     return _service
+
+# ─── Supabase ohlcv_cache (persistent, shared across restarts) ──────────────
+
+
+def _persistent_cache_key(
+    symbol: str,
+    interval: Interval,
+    period: Optional[Period],
+    start: Optional[datetime],
+    end: Optional[datetime],
+) -> str:
+    parts = [symbol.upper(), interval]
+    if period:
+        parts.append(f"P{period}")
+    parts.append(start.isoformat() if start else "None")
+    parts.append(end.isoformat() if end else "None")
+    return ":".join(parts)
+
+
+def _adaptive_ttl_seconds(end: Optional[datetime]) -> int:
+    """Short TTL for recent data; long TTL for settled history."""
+    settings = get_settings()
+    window_s = settings.ohlcv_cache_recent_window_days * 86400
+    if end is None:
+        return settings.ohlcv_cache_ttl_recent_hours * 3600
+    age = (datetime.now(timezone.utc) - (end if end.tzinfo else end.replace(tzinfo=timezone.utc))).total_seconds()
+    if age < window_s:
+        return settings.ohlcv_cache_ttl_recent_hours * 3600
+    return settings.ohlcv_cache_ttl_historical_days * 86400
+
+
+def _persistent_cache_get(
+    symbol: str,
+    interval: Interval,
+    period: Optional[Period],
+    start: Optional[datetime],
+    end: Optional[datetime],
+) -> Optional[OHLCVResponse]:
+    sb = get_service_client()
+    if sb is None:
+        return None
+    key = _persistent_cache_key(symbol, interval, period, start, end)
+    try:
+        res = (
+            sb.table("ohlcv_cache")
+            .select("data, metadata, expires_at")
+            .eq("cache_key", key)
+            .gt("expires_at", datetime.now(timezone.utc).isoformat())
+            .maybe_single()
+            .execute()
+        )
+    except Exception as e:
+        logger.warning("ohlcv_cache read failed for %s: %s", key, e)
+        return None
+    if not res or not res.data:
+        return None
+
+    meta = res.data.get("metadata") or {}
+    bars = [OHLCVBar(**b) for b in res.data.get("data", [])]
+    return OHLCVResponse(
+        symbol=symbol.upper(),
+        interval=interval,
+        period=period,
+        start=start,
+        end=end,
+        bars=bars,
+        bar_count=len(bars),
+        source=meta.get("source", "ohlcv_cache"),
+        retrieved_at=datetime.now(timezone.utc),
+        cache_hit=True,
+    )
+
+
+def _persistent_cache_put(
+    symbol: str,
+    interval: Interval,
+    period: Optional[Period],
+    start: Optional[datetime],
+    end: Optional[datetime],
+    response: OHLCVResponse,
+) -> None:
+    sb = get_service_client()
+    if sb is None or not response.bars:
+        return
+    key = _persistent_cache_key(symbol, interval, period, start, end)
+    ttl = _adaptive_ttl_seconds(end)
+    expires_at = datetime.now(timezone.utc).fromtimestamp(time.time() + ttl, tz=timezone.utc)
+    try:
+        row = {
+            "cache_key": key,
+            "ticker": symbol.upper(),
+            "interval": interval,
+            "start_date": (start or response.bars[0].timestamp).date().isoformat(),
+            "end_date": (end or response.bars[-1].timestamp).date().isoformat(),
+            "data": [b.model_dump(mode="json") for b in response.bars],
+            "metadata": {
+                "bar_count": response.bar_count,
+                "source": response.source,
+            },
+            "expires_at": expires_at.isoformat(),
+        }
+        sb.table("ohlcv_cache").upsert(row, on_conflict="cache_key").execute()
+    except Exception as e:
+        logger.warning("ohlcv_cache write failed for %s: %s", key, e)
+
 
 def to_dataframe(response: OHLCVResponse) -> pd.DataFrame:
     """

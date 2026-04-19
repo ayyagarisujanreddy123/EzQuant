@@ -36,7 +36,17 @@ class Settings(BaseSettings):
     # controls how many times we retry the underlying call before giving up.
     yfinance_max_retries: int = 2
     yfinance_retry_backoff_seconds: float = 1.5
- 
+
+    # --- OHLCV persistent cache (Supabase ohlcv_cache table) ---
+    ohlcv_cache_recent_window_days: int = 7
+    ohlcv_cache_ttl_recent_hours: int = 1
+    ohlcv_cache_ttl_historical_days: int = 30
+
+    # --- Supabase (backend-side, never shipped to browser) ---
+    supabase_url: str = ""
+    supabase_service_role_key: str = ""
+    supabase_jwt_secret: str = ""
+
     @property
     def cors_origins_list(self) -> List[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

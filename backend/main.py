@@ -12,7 +12,7 @@ Interactive docs:
 import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from backend.api import health, market
+from backend.api import health, market, pipeline
 from backend.core.config import get_settings
 
 
@@ -48,6 +48,7 @@ def create_app() -> FastAPI:
     # Routes
     app.include_router(health.router)
     app.include_router(market.router)
+    app.include_router(pipeline.router)
 
     return app
 
