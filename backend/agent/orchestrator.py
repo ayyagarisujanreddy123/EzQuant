@@ -12,6 +12,7 @@ Design:
 """
 from __future__ import annotations
 
+import base64
 import json
 import logging
 from datetime import datetime, timezone
@@ -74,9 +75,10 @@ async def run_agent(
         canvas_state=canvas_state,
     )
 
+    model_name = settings.gemini_model
     tools_arg = [gproto.Tool(function_declarations=toolreg.all_declarations())]
     model = genai.GenerativeModel(
-        settings.gemini_model,
+        model_name,
         system_instruction=system_prompt,
         tools=tools_arg,
         safety_settings=SAFETY_SETTINGS,
@@ -92,7 +94,26 @@ async def run_agent(
     tool_calls_log: List[Dict[str, Any]] = []
     citations: List[Dict[str, Any]] = []
 
-    message_to_send: Any = user_message
+    # First turn: text + any image attachments as inline_data Parts.
+    first_turn_parts: List[gproto.Part] = [gproto.Part(text=user_message)]
+    attached_image_names: List[str] = []
+    for att in attachments or []:
+        if (att.get("type") == "image") and att.get("data_b64"):
+            try:
+                raw = base64.b64decode(att["data_b64"])
+                first_turn_parts.append(
+                    gproto.Part(
+                        inline_data=gproto.Blob(
+                            mime_type=att.get("mime") or "image/png",
+                            data=raw,
+                        )
+                    )
+                )
+                attached_image_names.append(att.get("name") or "image")
+            except Exception as e:
+                logger.warning("Skipping bad image attachment %s: %s", att.get("name"), e)
+
+    message_to_send: Any = first_turn_parts if len(first_turn_parts) > 1 else user_message
 
     for turn_idx in range(MAX_TOOL_TURNS + 1):
         try:
@@ -104,8 +125,10 @@ async def run_agent(
 
         function_calls: List[gproto.FunctionCall] = []
         text_buf: List[str] = []
+        image_parts: List[Dict[str, str]] = []
 
-        # Walk the response parts — mix of text + function calls.
+        # Walk the response parts — mix of text, function calls, and (for
+        # image-capable models) inline_data image blobs.
         candidate = response.candidates[0] if response.candidates else None
         if candidate and candidate.content and candidate.content.parts:
             for part in candidate.content.parts:
@@ -114,11 +137,26 @@ async def run_agent(
                 fc = getattr(part, "function_call", None)
                 if fc and fc.name:
                     function_calls.append(fc)
+                inline = getattr(part, "inline_data", None)
+                if inline and getattr(inline, "data", None):
+                    try:
+                        mime = inline.mime_type or "image/png"
+                        raw = inline.data
+                        if isinstance(raw, bytes):
+                            b64 = base64.b64encode(raw).decode("ascii")
+                        else:
+                            b64 = base64.b64encode(bytes(raw)).decode("ascii")
+                        image_parts.append({"mime": mime, "data_b64": b64})
+                    except Exception as e:
+                        logger.warning("Skipping malformed inline_data part: %s", e)
 
         if text_buf:
             joined = "".join(text_buf)
             assistant_text_parts.append(joined)
             yield {"type": "text", "content": joined}
+
+        for img in image_parts:
+            yield {"type": "image", "mime": img["mime"], "data_b64": img["data_b64"]}
 
         if not function_calls:
             # No more tools to call → we're done.
@@ -178,6 +216,15 @@ async def run_agent(
             if name == "suggest_pipeline_template" and isinstance(result, dict):
                 if result.get("ok") and result.get("template"):
                     yield {"type": "pipeline_template", "template": result["template"]}
+
+            # Surface generated chart images as their own image event.
+            if name == "generate_chart" and isinstance(result, dict):
+                if result.get("image_b64"):
+                    yield {
+                        "type": "image",
+                        "mime": result.get("mime", "image/png"),
+                        "data_b64": result["image_b64"],
+                    }
 
             function_responses.append(
                 gproto.Part(

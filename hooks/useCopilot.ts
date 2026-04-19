@@ -195,6 +195,21 @@ export function useCopilot({
               )
               break
             }
+            case 'image':
+              setMessages((p) =>
+                p.map((m) =>
+                  m.id === agentId
+                    ? {
+                        ...m,
+                        images: [
+                          ...(m.images ?? []),
+                          { mime: event.mime, data_b64: event.data_b64 },
+                        ],
+                      }
+                    : m
+                )
+              )
+              break
             case 'done':
               break
           }

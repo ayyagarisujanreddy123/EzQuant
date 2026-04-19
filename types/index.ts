@@ -192,6 +192,11 @@ export interface Citation {
   url?: string
 }
 
+export interface GeneratedImage {
+  mime: string
+  data_b64: string
+}
+
 export interface Message {
   id: string
   role: MessageRole
@@ -200,6 +205,7 @@ export interface Message {
   citations?: Citation[]
   appliedTemplate?: boolean
   attachmentNote?: string
+  images?: GeneratedImage[]
   timestamp: Date
 }
 
@@ -219,6 +225,7 @@ export type CopilotEvent =
   | { type: 'applied_banner' }
   | { type: 'suggest_pipeline_template'; graph: PipelineGraph }
   | { type: 'pipeline_template'; template: PipelineTemplate }
+  | { type: 'image'; mime: string; data_b64: string }
   | { type: 'done' }
 
 export interface PageContext {

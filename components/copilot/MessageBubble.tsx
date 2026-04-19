@@ -107,6 +107,27 @@ export function MessageBubble({ message }: { message: Message }) {
           </ReactMarkdown>
         </div>
       )}
+      {message.images && message.images.length > 0 && (
+        <div className="flex flex-col gap-1.5 mt-1">
+          {message.images.map((img, i) => (
+            <a
+              key={i}
+              href={`data:${img.mime};base64,${img.data_b64}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block overflow-hidden rounded-md border border-eq-border-2 hover:border-eq-cyan transition-colors"
+              title="Open full size"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={`data:${img.mime};base64,${img.data_b64}`}
+                alt={`Generated ${i + 1}`}
+                className="w-full h-auto max-h-80 object-contain bg-bg-2"
+              />
+            </a>
+          ))}
+        </div>
+      )}
       {message.appliedTemplate && <AppliedBanner />}
       {message.citations && message.citations.length > 0 && (
         <div className="flex flex-wrap gap-1 mt-0.5">

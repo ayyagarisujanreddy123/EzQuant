@@ -9,6 +9,7 @@ Every tool:
 """
 from __future__ import annotations
 
+import base64
 import json
 import logging
 from typing import Any, Callable, Dict, List, Optional
@@ -308,6 +309,87 @@ def _validate_template(t: Any) -> List[str]:
                     "— insert one (source column = your feature, e.g. ema_20) before it"
                 )
     return errors
+
+
+# ─── generate_chart (calls the image-output Gemini model) ────────────────────
+
+
+@register(
+    gproto.FunctionDeclaration(
+        name="generate_chart",
+        description=(
+            "Generate a small illustrative chart/diagram image using Gemini's "
+            "image-output model. Use this ONLY when the user explicitly asks "
+            "for a drawing, diagram, or visualization. DO NOT use this for "
+            "pipeline-building requests — those go through "
+            "`suggest_pipeline_template` which stages blocks on the canvas."
+        ),
+        parameters=gproto.Schema(
+            type=gproto.Type.OBJECT,
+            properties={
+                "description": gproto.Schema(
+                    type=gproto.Type.STRING,
+                    description=(
+                        "Detailed description of the chart to draw — style, "
+                        "axes, labels, example data shape. One or two sentences."
+                    ),
+                ),
+                "chart_type": gproto.Schema(
+                    type=gproto.Type.STRING,
+                    description="Hint: 'line', 'equity_curve', 'distribution', 'heatmap', 'diagram'.",
+                ),
+            },
+            required=["description"],
+        ),
+    )
+)
+def generate_chart(description: str, chart_type: Optional[str] = None) -> Dict[str, Any]:
+    settings = get_settings()
+    if not settings.google_api_key:
+        return {"error": "GOOGLE_API_KEY not configured."}
+    if not settings.gemini_image_model:
+        return {"error": "GEMINI_IMAGE_MODEL not configured."}
+
+    genai.configure(api_key=settings.google_api_key)
+
+    prompt = (
+        "Generate a clean illustrative chart for a quant research context. "
+        "Dark background, thin white/cyan lines, minimal grid, labeled axes, "
+        "concise title. Only produce the image — no surrounding text.\n\n"
+        f"Chart type hint: {chart_type or 'auto'}\n"
+        f"Description: {description}"
+    )
+
+    try:
+        image_model = genai.GenerativeModel(settings.gemini_image_model)
+        response = image_model.generate_content(
+            prompt,
+            generation_config=genai.types.GenerationConfig(temperature=0.5),
+        )
+    except Exception as e:
+        logger.warning("generate_chart call failed: %s", e)
+        return {"error": f"image model failed: {type(e).__name__}: {e}"}
+
+    # Walk the response parts for an inline_data image.
+    try:
+        parts = response.candidates[0].content.parts if response.candidates else []
+    except Exception:
+        parts = []
+    for part in parts:
+        inline = getattr(part, "inline_data", None)
+        if inline and getattr(inline, "data", None):
+            raw = inline.data
+            b = bytes(raw) if not isinstance(raw, bytes) else raw
+            return {
+                "image_b64": base64.b64encode(b).decode("ascii"),
+                "mime": inline.mime_type or "image/png",
+                "description": description,
+            }
+
+    return {"error": "image model returned no image"}
+
+
+# ─── Helpers ─────────────────────────────────────────────────────────────────
 
 
 def _has_ancestor_of_type(

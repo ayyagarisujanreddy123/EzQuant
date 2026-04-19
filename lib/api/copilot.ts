@@ -8,6 +8,9 @@ import { createClient } from '@/lib/supabase/client'
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8000'
 
+// Cap per-image payload so we don't blow the request body.
+const MAX_IMAGE_BYTES = 4 * 1024 * 1024 // 4 MB raw; ~5.3 MB after base64
+
 interface ChatOptions {
   sessionId: string
   projectId?: string | null
@@ -33,6 +36,31 @@ export async function* streamCopilotChat(
     return
   }
 
+  // Read file bytes for image attachments. PDFs and others pass metadata only.
+  const preparedAttachments = await Promise.all(
+    (attachments ?? []).map(async (a) => {
+      if (a.type !== 'image' || !a.file) {
+        return { id: a.id, name: a.name, type: a.type }
+      }
+      if (a.file.size > MAX_IMAGE_BYTES) {
+        return {
+          id: a.id,
+          name: a.name,
+          type: a.type,
+          error: `Image too large (${(a.file.size / 1024 / 1024).toFixed(1)} MB > 4 MB cap)`,
+        }
+      }
+      const buf = await a.file.arrayBuffer()
+      return {
+        id: a.id,
+        name: a.name,
+        type: 'image' as const,
+        mime: a.file.type || 'image/png',
+        data_b64: bytesToBase64(new Uint8Array(buf)),
+      }
+    })
+  )
+
   const body = {
     message,
     page_context: pageContext,
@@ -40,7 +68,7 @@ export async function* streamCopilotChat(
     project_id: opts.projectId ?? null,
     canvas_state: opts.canvasState ?? null,
     mode: opts.mode ?? 'ask',
-    attachments: attachments?.map((a) => ({ id: a.id, name: a.name, type: a.type })),
+    attachments: preparedAttachments,
   }
 
   const res = await fetch(`${BACKEND_URL}/api/agent/chat`, {
@@ -104,6 +132,20 @@ async function safeErrorDetail(res: Response): Promise<string> {
   } catch {
     return `HTTP ${res.status}`
   }
+}
+
+/**
+ * btoa() chokes on multi-byte chars and throws on large inputs. Build base64
+ * in chunks to handle ≤4MB images without RangeError on String.fromCharCode.
+ */
+function bytesToBase64(bytes: Uint8Array): string {
+  const CHUNK = 0x8000
+  let s = ''
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    const slice = bytes.subarray(i, i + CHUNK) as unknown as number[]
+    s += String.fromCharCode.apply(null, slice)
+  }
+  return btoa(s)
 }
 
 function parseFrame(frame: string): CopilotEvent | null {
