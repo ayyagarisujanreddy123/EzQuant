@@ -1,7 +1,6 @@
 <p align="center">
-  <img width="720" alt="SignalTrace" src="https://github.com/user-attachments/assets/f82f6a05-96c0-4de5-920a-e8f674ed92ae">
+  <img alt="SignalTracer" src="https://github.com/user-attachments/assets/01050811-d901-488b-975e-995fb3e1c0e3">
 </p>
-
 
 
 > **Visual quant research — trace every signal from data to backtest.**
