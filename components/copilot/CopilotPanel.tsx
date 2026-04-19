@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
-import { Paperclip, Image as ImageIcon, RotateCcw, Send } from 'lucide-react'
+import { Paperclip, Image as ImageIcon, RotateCcw, Send, X, Sparkles } from 'lucide-react'
 import { useCopilot } from '@/hooks/useCopilot'
 import { MessageBubble } from './MessageBubble'
 import { ThinkingIndicator } from './ThinkingIndicator'
@@ -42,6 +42,7 @@ export function CopilotPanel({
 
   const [draft, setDraft] = useState('')
   const [showSlash, setShowSlash] = useState(false)
+  const [isOpen, setIsOpen] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const threadRef = useRef<HTMLDivElement>(null)
 
@@ -53,9 +54,18 @@ export function CopilotPanel({
   }, [messages])
 
   useEffect(() => {
-    const handler = () => textareaRef.current?.focus()
-    document.addEventListener('focus-composer', handler)
-    return () => document.removeEventListener('focus-composer', handler)
+    const focusHandler = () => {
+      setIsOpen(true)
+      // wait a tick for the textarea to mount
+      setTimeout(() => textareaRef.current?.focus(), 0)
+    }
+    const toggleHandler = () => setIsOpen((o) => !o)
+    document.addEventListener('focus-composer', focusHandler)
+    document.addEventListener('toggle-copilot', toggleHandler)
+    return () => {
+      document.removeEventListener('focus-composer', focusHandler)
+      document.removeEventListener('toggle-copilot', toggleHandler)
+    }
   }, [])
 
   const handleSend = () => {
@@ -99,134 +109,161 @@ export function CopilotPanel({
   }[pageContext.page]
 
   return (
-    <div className="flex flex-col bg-bg-1 border-l border-eq-border overflow-hidden h-full min-h-0">
-      {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2 bg-bg-2 border-b border-eq-border flex-shrink-0">
-        <div className="w-5 h-5 rounded-full bg-gemini flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">
-          ✦
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="text-[12px] font-medium text-eq-t1">Quant Copilot</div>
-          <div className="text-[9px] text-eq-t3 font-mono">{subtitle}</div>
-        </div>
+    <>
+      {/* Floating FAB — visible when panel closed */}
+      {!isOpen && (
         <button
           type="button"
-          onClick={clearMessages}
-          className="w-5 h-5 rounded flex items-center justify-center text-eq-t3 hover:text-eq-t1 hover:bg-bg-3 transition-colors"
+          onClick={() => setIsOpen(true)}
+          aria-label="Open Quant Copilot"
+          className="fixed bottom-5 right-5 w-12 h-12 rounded-full bg-gemini text-white flex items-center justify-center shadow-xl shadow-black/50 hover:scale-105 active:scale-95 transition-transform z-50 border border-white/10"
         >
-          <RotateCcw size={12} />
+          <Sparkles size={18} />
         </button>
-      </div>
+      )}
 
-      {/* Context strip */}
-      <div className="flex items-center gap-1.5 px-3 py-1.5 bg-eq-cyan-dim/30 border-b border-eq-border text-[10px] text-eq-cyan flex-shrink-0">
-        <div className="w-1 h-1 rounded-full bg-eq-cyan flex-shrink-0" />
-        Context: {contextLabel}
-      </div>
+      {/* Floating panel — opens on FAB click / ⌘K */}
+      {isOpen && (
+        <div className="fixed top-14 right-4 bottom-4 w-[340px] bg-bg-1 border border-eq-border-2 rounded-xl shadow-2xl shadow-black/50 flex flex-col overflow-hidden z-50 min-h-0">
+          {/* Header */}
+          <div className="flex items-center gap-2 px-3 py-2 bg-bg-2 border-b border-eq-border flex-shrink-0">
+            <div className="w-5 h-5 rounded-full bg-gemini flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">
+              ✦
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[12px] font-medium text-eq-t1">Quant Copilot</div>
+              <div className="text-[9px] text-eq-t3 font-mono">{subtitle}</div>
+            </div>
+            <button
+              type="button"
+              onClick={clearMessages}
+              title="Clear thread"
+              className="w-5 h-5 rounded flex items-center justify-center text-eq-t3 hover:text-eq-t1 hover:bg-bg-3 transition-colors"
+            >
+              <RotateCcw size={12} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsOpen(false)}
+              title="Close"
+              className="w-5 h-5 rounded flex items-center justify-center text-eq-t3 hover:text-eq-t1 hover:bg-bg-3 transition-colors"
+              aria-label="Close Copilot"
+            >
+              <X size={13} />
+            </button>
+          </div>
 
-      {/* Mode tabs */}
-      <div className="flex gap-1 px-2.5 py-1.5 border-b border-eq-border flex-shrink-0">
-        {MODES.map((m) => (
-          <button
-            key={m.id}
-            type="button"
-            onClick={() => setMode(m.id)}
-            className={`flex-1 py-1 rounded text-[10px] font-medium transition-colors border ${
-              mode === m.id
-                ? 'text-eq-t1 bg-bg-3 border-eq-accent/35'
-                : 'text-eq-t2 bg-bg-2 border-eq-border hover:text-eq-t1'
-            }`}
-          >
-            {m.label}
-          </button>
-        ))}
-      </div>
+          {/* Context strip */}
+          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-eq-cyan-dim/30 border-b border-eq-border text-[10px] text-eq-cyan flex-shrink-0">
+            <div className="w-1 h-1 rounded-full bg-eq-cyan flex-shrink-0" />
+            Context: {contextLabel}
+          </div>
 
-      {/* Thread */}
-      <div
-        ref={threadRef}
-        className="flex-1 overflow-y-auto p-3 flex flex-col gap-3 min-h-0"
-      >
-        {messages.map((m) => (
-          <MessageBubble key={m.id} message={m} />
-        ))}
-        {isStreaming && <ThinkingIndicator />}
-      </div>
-
-      {/* Composer */}
-      <div className="flex-shrink-0 p-2.5 border-t border-eq-border bg-bg-2">
-        {attachments.length > 0 && (
-          <div className="flex flex-wrap gap-1 mb-1.5">
-            {attachments.map((a) => (
-              <AttachmentChip
-                key={a.id}
-                attachment={a}
-                onRemove={() => removeAttachment(a.id)}
-              />
+          {/* Mode tabs */}
+          <div className="flex gap-1 px-2.5 py-1.5 border-b border-eq-border flex-shrink-0">
+            {MODES.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => setMode(m.id)}
+                className={`flex-1 py-1 rounded text-[10px] font-medium transition-colors border ${
+                  mode === m.id
+                    ? 'text-eq-t1 bg-bg-3 border-eq-accent/35'
+                    : 'text-eq-t2 bg-bg-2 border-eq-border hover:text-eq-t1'
+                }`}
+              >
+                {m.label}
+              </button>
             ))}
           </div>
-        )}
-        <div className="relative bg-bg-3 border border-eq-border-2 rounded-lg p-2 flex flex-col gap-1.5">
-          {showSlash && (
-            <div className="absolute bottom-full left-0 mb-1 w-full bg-bg-3 border border-eq-border-2 rounded-lg overflow-hidden shadow-xl z-10">
-              {SLASH_COMMANDS.map((cmd) => (
+
+          {/* Thread */}
+          <div
+            ref={threadRef}
+            className="flex-1 overflow-y-auto p-3 flex flex-col gap-3 min-h-0"
+          >
+            {messages.map((m) => (
+              <MessageBubble key={m.id} message={m} />
+            ))}
+            {isStreaming && <ThinkingIndicator />}
+          </div>
+
+          {/* Composer */}
+          <div className="flex-shrink-0 p-2.5 border-t border-eq-border bg-bg-2">
+            {attachments.length > 0 && (
+              <div className="flex flex-wrap gap-1 mb-1.5">
+                {attachments.map((a) => (
+                  <AttachmentChip
+                    key={a.id}
+                    attachment={a}
+                    onRemove={() => removeAttachment(a.id)}
+                  />
+                ))}
+              </div>
+            )}
+            <div className="relative bg-bg-3 border border-eq-border-2 rounded-lg p-2 flex flex-col gap-1.5">
+              {showSlash && (
+                <div className="absolute bottom-full left-0 mb-1 w-full bg-bg-3 border border-eq-border-2 rounded-lg overflow-hidden shadow-xl z-10">
+                  {SLASH_COMMANDS.map((cmd) => (
+                    <button
+                      key={cmd}
+                      type="button"
+                      onClick={() => {
+                        setDraft(cmd + ' ')
+                        setShowSlash(false)
+                        textareaRef.current?.focus()
+                      }}
+                      className="w-full px-3 py-1.5 text-left text-[10px] font-mono text-eq-t2 hover:bg-bg-4 hover:text-eq-t1 transition-colors"
+                    >
+                      {cmd}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <textarea
+                ref={textareaRef}
+                value={draft}
+                onChange={handleChange}
+                onKeyDown={handleKeyDown}
+                placeholder="Ask anything, or /template /ask /debug"
+                rows={1}
+                data-composer="true"
+                className="w-full bg-transparent border-none text-[11px] text-eq-t1 placeholder:text-eq-t3 font-sans outline-none resize-none leading-relaxed"
+              />
+              <div className="flex items-center gap-1">
                 <button
-                  key={cmd}
                   type="button"
-                  onClick={() => {
-                    setDraft(cmd + ' ')
-                    setShowSlash(false)
-                    textareaRef.current?.focus()
-                  }}
-                  className="w-full px-3 py-1.5 text-left text-[10px] font-mono text-eq-t2 hover:bg-bg-4 hover:text-eq-t1 transition-colors"
+                  onClick={() => handleFileAttach('image')}
+                  className="w-5 h-5 rounded flex items-center justify-center text-eq-t3 hover:text-eq-t1 hover:bg-bg-4 transition-colors"
+                  aria-label="Attach image"
                 >
-                  {cmd}
+                  <ImageIcon size={12} />
                 </button>
-              ))}
+                <button
+                  type="button"
+                  onClick={() => handleFileAttach('pdf')}
+                  className="w-5 h-5 rounded flex items-center justify-center text-eq-t3 hover:text-eq-t1 hover:bg-bg-4 transition-colors"
+                  aria-label="Attach PDF"
+                >
+                  <Paperclip size={12} />
+                </button>
+                <span className="text-[9px] text-eq-t3 font-mono ml-auto mr-1">
+                  / for commands
+                </span>
+                <button
+                  type="button"
+                  onClick={handleSend}
+                  disabled={!draft.trim() || isStreaming}
+                  className="w-6 h-5 rounded bg-eq-accent text-white flex items-center justify-center disabled:opacity-40 hover:bg-eq-accent-2 transition-colors"
+                  aria-label="Send"
+                >
+                  <Send size={10} />
+                </button>
+              </div>
             </div>
-          )}
-          <textarea
-            ref={textareaRef}
-            value={draft}
-            onChange={handleChange}
-            onKeyDown={handleKeyDown}
-            placeholder="Ask anything, or /template /ask /debug"
-            rows={1}
-            data-composer="true"
-            className="w-full bg-transparent border-none text-[11px] text-eq-t1 placeholder:text-eq-t3 font-sans outline-none resize-none leading-relaxed"
-          />
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => handleFileAttach('image')}
-              className="w-5 h-5 rounded flex items-center justify-center text-eq-t3 hover:text-eq-t1 hover:bg-bg-4 transition-colors"
-              aria-label="Attach image"
-            >
-              <ImageIcon size={12} />
-            </button>
-            <button
-              type="button"
-              onClick={() => handleFileAttach('pdf')}
-              className="w-5 h-5 rounded flex items-center justify-center text-eq-t3 hover:text-eq-t1 hover:bg-bg-4 transition-colors"
-              aria-label="Attach PDF"
-            >
-              <Paperclip size={12} />
-            </button>
-            <span className="text-[9px] text-eq-t3 font-mono ml-auto mr-1">
-              / for commands
-            </span>
-            <button
-              type="button"
-              onClick={handleSend}
-              disabled={!draft.trim() || isStreaming}
-              className="w-6 h-5 rounded bg-eq-accent text-white flex items-center justify-center disabled:opacity-40 hover:bg-eq-accent-2 transition-colors"
-              aria-label="Send"
-            >
-              <Send size={10} />
-            </button>
           </div>
         </div>
-      </div>
-    </div>
+      )}
+    </>
   )
 }

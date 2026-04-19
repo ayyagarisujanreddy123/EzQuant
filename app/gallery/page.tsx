@@ -44,8 +44,8 @@ export default function GalleryPage() {
 
   return (
     <AppShell>
-      <div className="h-full grid grid-cols-[1fr_320px] overflow-hidden">
-        <div className="overflow-y-auto p-6">
+      <div className="h-full overflow-hidden">
+        <div className="h-full overflow-y-auto p-6">
           <div className="mb-5">
             <h1 className="text-[17px] font-medium text-eq-t1">Template Gallery</h1>
             <p className="text-[12px] text-eq-t2 mt-0.5">

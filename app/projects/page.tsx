@@ -3,10 +3,11 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { AppShell } from '@/components/layout/AppShell'
 import { CopilotPanel } from '@/components/copilot/CopilotPanel'
-import { fetchProjects } from '@/lib/api/placeholders'
+import { fetchProjects, createProject } from '@/lib/api/placeholders'
 import { MOCK_TEMPLATES } from '@/lib/mocks/mockTemplates'
 import { MOCK_PROJECTS_MESSAGES } from '@/lib/mocks/mockMessages'
-import type { Project, PageContext } from '@/types'
+import type { Project, PageContext, Template } from '@/types'
+import { Loader2 } from 'lucide-react'
 
 const ACCENT_BAR: Record<string, string> = {
   green: 'bg-eq-green',
@@ -22,10 +23,29 @@ const ACCENT_BADGE: Record<string, string> = {
 export default function ProjectsPage() {
   const router = useRouter()
   const [projects, setProjects] = useState<Project[]>([])
+  const [loading, setLoading] = useState(true)
+  const [creating, setCreating] = useState(false)
 
   useEffect(() => {
-    fetchProjects().then(setProjects)
+    fetchProjects()
+      .then(setProjects)
+      .catch(() => setProjects([]))
+      .finally(() => setLoading(false))
   }, [])
+
+  const handleNewPipeline = async (input?: { name?: string; template?: Template }) => {
+    setCreating(true)
+    try {
+      const project = await createProject({
+        name: input?.name ?? input?.template?.name ?? 'Untitled pipeline',
+        graph: input?.template?.graph,
+      })
+      router.push(`/canvas/${project.id}`)
+    } catch (err) {
+      console.error(err)
+      setCreating(false)
+    }
+  }
 
   const ctx: PageContext = {
     page: 'projects',
@@ -34,8 +54,8 @@ export default function ProjectsPage() {
 
   return (
     <AppShell>
-      <div className="h-full grid grid-cols-[1fr_320px] overflow-hidden">
-        <div className="overflow-y-auto p-6">
+      <div className="h-full overflow-hidden">
+        <div className="h-full overflow-y-auto p-6">
           <div className="flex items-start justify-between mb-5">
             <div>
               <h1 className="text-[17px] font-medium text-eq-t1">Research Projects</h1>
@@ -43,9 +63,11 @@ export default function ProjectsPage() {
             </div>
             <button
               type="button"
-              onClick={() => router.push('/canvas/new')}
-              className="bg-eq-accent text-white border-none px-3.5 py-1.5 rounded-[7px] text-[12px] font-medium hover:bg-eq-accent-2 transition-colors"
+              onClick={() => handleNewPipeline()}
+              disabled={creating}
+              className="flex items-center gap-1.5 bg-eq-accent text-white border-none px-3.5 py-1.5 rounded-[7px] text-[12px] font-medium hover:bg-eq-accent-2 disabled:opacity-60 transition-colors"
             >
+              {creating ? <Loader2 size={12} className="animate-spin" /> : null}
               + New Pipeline
             </button>
           </div>
@@ -57,7 +79,7 @@ export default function ProjectsPage() {
             {MOCK_TEMPLATES.map((tpl) => (
               <div
                 key={tpl.id}
-                onClick={() => router.push(`/canvas/${tpl.id}`)}
+                onClick={() => handleNewPipeline({ template: tpl })}
                 className="relative bg-bg-2 border border-eq-border rounded-[10px] p-3.5 cursor-pointer hover:border-eq-border-2 hover:bg-bg-3 transition-all overflow-hidden"
               >
                 <div

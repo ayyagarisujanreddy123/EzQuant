@@ -40,6 +40,12 @@
   --animate-t1: thinking-pulse 1.2s ease-in-out infinite;
   --animate-t2: thinking-pulse 1.2s ease-in-out 0.2s infinite;
   --animate-t3: thinking-pulse 1.2s ease-in-out 0.4s infinite;
+
+  /* Landing page */
+  --animate-blob-a: blob-drift 14s ease-in-out infinite;
+  --animate-blob-b: blob-drift 18s ease-in-out 2s infinite reverse;
+  --animate-edge-dash: edge-dash 3s linear infinite;
+  --animate-float: float-y 6s ease-in-out infinite;
 }
 
 /* Dynamic values that reference CSS vars set at runtime (next/font).
@@ -52,6 +58,21 @@
 @keyframes thinking-pulse {
   0%, 100% { opacity: 0.3; }
   50% { opacity: 1; }
+}
+
+@keyframes blob-drift {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%      { transform: translate(40px, -30px) scale(1.1); }
+  66%      { transform: translate(-30px, 40px) scale(0.95); }
+}
+
+@keyframes edge-dash {
+  to { stroke-dashoffset: -20; }
+}
+
+@keyframes float-y {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-8px); }
 }
 
 :root {

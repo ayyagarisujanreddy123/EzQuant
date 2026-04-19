@@ -1,7 +1,9 @@
 'use client'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { LogOut } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 
 const TABS = [
   { label: 'Projects', href: '/projects' },
@@ -11,6 +13,14 @@ const TABS = [
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  const [email, setEmail] = useState<string | null>(null)
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setEmail(user?.email ?? null)
+    })
+  }, [])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -46,10 +56,34 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <span className="text-[10px] text-eq-t3 font-mono px-1.5 py-0.5 border border-eq-border-2 rounded bg-bg-2">
             ⌘K
           </span>
-          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-eq-accent-dim text-eq-accent border border-eq-accent/25 rounded-md text-[11px] font-medium">
+          <button
+            type="button"
+            onClick={() =>
+              document.dispatchEvent(new CustomEvent('toggle-copilot'))
+            }
+            className="flex items-center gap-1.5 px-2.5 py-1 bg-eq-accent-dim text-eq-accent border border-eq-accent/25 rounded-md text-[11px] font-medium hover:bg-eq-accent/20 transition-colors"
+          >
             <div className="w-1.5 h-1.5 rounded-full bg-eq-cyan" />
             Quant Copilot
-          </div>
+          </button>
+          {email && (
+            <span
+              className="text-[10px] font-mono text-eq-t3 max-w-[140px] truncate"
+              title={email}
+            >
+              {email}
+            </span>
+          )}
+          <form action="/auth/logout" method="POST">
+            <button
+              type="submit"
+              title="Sign out"
+              className="flex items-center gap-1 px-2 py-1 bg-bg-2 text-eq-t2 border border-eq-border hover:bg-eq-red-dim hover:text-eq-red hover:border-eq-red/30 rounded-md text-[11px] font-medium transition-colors"
+            >
+              <LogOut size={11} />
+              Sign out
+            </button>
+          </form>
         </div>
       </nav>
       <main className="flex-1 overflow-hidden">{children}</main>
