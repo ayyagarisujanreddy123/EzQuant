@@ -1,0 +1,908 @@
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=DM+Sans:wght@300;400;500;600&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg0:#0b0d12; --bg1:#10131b; --bg2:#161a25; --bg3:#1c2131; --bg4:#242a3c;
+    --border:rgba(255,255,255,0.06); --border2:rgba(255,255,255,0.11);
+    --green:#2dd4a0; --green-dim:rgba(45,212,160,0.12);
+    --red:#f87171; --red-dim:rgba(248,113,113,0.12);
+    --amber:#fbbf24; --amber-dim:rgba(251,191,36,0.12);
+    --blue:#60a5fa; --blue-dim:rgba(96,165,250,0.12);
+    --text1:#e8eaf0; --text2:#8b909e; --text3:#555a6a;
+    --accent:#8b7dff; --accent2:#6851ff; --accent-dim:rgba(139,125,255,0.14);
+    --gemini:linear-gradient(135deg,#8b7dff 0%,#22d3ee 100%);
+    --gemini-solid:#22d3ee; --gemini-solid-dim:rgba(34,211,238,0.12);
+    --font:'DM Sans',sans-serif; --mono:'JetBrains Mono',monospace;
+  }
+
+  .wrapper { font-family:var(--font); background:var(--bg0); color:var(--text1);
+    width:100%; min-height:680px; overflow:hidden; border-radius:12px; border:1px solid var(--border2); }
+
+  .nav-bar { display:flex; align-items:center; gap:4px; padding:10px 16px;
+    background:var(--bg1); border-bottom:1px solid var(--border); }
+  .nav-logo { font-size:13px; font-weight:600; color:var(--text1); margin-right:16px; letter-spacing:-0.3px; }
+  .nav-logo span { background:var(--gemini); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+  .nav-tab { padding:6px 14px; border-radius:6px; font-size:12px; font-weight:500;
+    color:var(--text2); cursor:pointer; border:none; background:none; font-family:var(--font); transition:all 0.15s; }
+  .nav-tab:hover { color:var(--text1); background:var(--bg3); }
+  .nav-tab.active { color:var(--text1); background:var(--bg3); border:1px solid var(--border2); }
+
+  .kbd-hint { font-size:10px; color:var(--text3); font-family:var(--mono);
+    padding:2px 6px; border:1px solid var(--border2); border-radius:4px; background:var(--bg2); }
+  .copilot-toggle {
+    display:flex; align-items:center; gap:5px; padding:4px 9px;
+    background:var(--accent-dim); color:var(--accent);
+    border:1px solid rgba(139,125,255,0.25); border-radius:6px;
+    font-size:11px; font-weight:500; cursor:pointer;
+  }
+  .copilot-toggle .dot { width:5px; height:5px; border-radius:50%; background:var(--gemini-solid); }
+
+  .page { display:none; }
+  .page.active { display:block; }
+
+  .projects-page { padding:24px; background:var(--bg0); min-height:620px; display:grid; grid-template-columns:1fr 320px; gap:18px; }
+  .page-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; }
+  .page-title { font-size:17px; font-weight:500; color:var(--text1); }
+  .page-subtitle { font-size:12px; color:var(--text2); margin-top:2px; }
+  .btn-primary { background:var(--accent); color:#fff; border:none; padding:7px 14px;
+    border-radius:7px; font-size:12px; font-weight:500; cursor:pointer; font-family:var(--font); }
+  .section-label { font-size:10px; font-weight:500; color:var(--text3);
+    text-transform:uppercase; letter-spacing:0.8px; margin-bottom:10px; }
+
+  .templates-row { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:22px; }
+  .template-card { background:var(--bg2); border:1px solid var(--border);
+    border-radius:10px; padding:14px; cursor:pointer; position:relative; overflow:hidden; transition:all 0.15s; }
+  .template-card:hover { border-color:var(--border2); background:var(--bg3); }
+  .template-card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; }
+  .template-card.tpl-mom::before { background:var(--green); }
+  .template-card.tpl-pairs::before { background:var(--blue); }
+  .template-card.tpl-vol::before { background:var(--amber); }
+  .tpl-icon { font-size:16px; margin-bottom:6px; }
+  .tpl-name { font-size:12px; font-weight:500; color:var(--text1); margin-bottom:3px; }
+  .tpl-desc { font-size:10px; color:var(--text2); line-height:1.5; }
+  .tpl-badge { display:inline-block; margin-top:6px; font-size:9px; font-family:var(--mono); padding:2px 6px; border-radius:3px; }
+  .tpl-badge.green { background:var(--green-dim); color:var(--green); }
+  .tpl-badge.blue { background:var(--blue-dim); color:var(--blue); }
+  .tpl-badge.amber { background:var(--amber-dim); color:var(--amber); }
+
+  .projects-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; }
+  .project-card { background:var(--bg2); border:1px solid var(--border);
+    border-radius:10px; padding:14px; cursor:pointer; transition:all 0.15s; }
+  .project-card:hover { border-color:var(--accent); }
+  .proj-name { font-size:12px; font-weight:500; color:var(--text1); margin-bottom:4px; }
+  .proj-meta { font-size:10px; color:var(--text2); font-family:var(--mono); }
+  .proj-sharpe { font-size:19px; font-weight:300; color:var(--green); margin:6px 0 0; font-family:var(--mono); }
+  .proj-sharpe.neg { color:var(--red); }
+  .proj-sharpe-label { font-size:9px; color:var(--text3); }
+  .proj-footer { display:flex; align-items:center; justify-content:space-between;
+    margin-top:10px; padding-top:8px; border-top:1px solid var(--border); }
+  .proj-ts { font-size:9px; color:var(--text3); }
+  .proj-status { width:6px; height:6px; border-radius:50%; }
+  .proj-status.green { background:var(--green); }
+  .proj-status.amber { background:var(--amber); }
+
+  .canvas-page { display:grid; grid-template-rows:44px 1fr 110px; min-height:620px; background:var(--bg0); }
+
+  .top-bar { display:flex; align-items:center; gap:8px; padding:0 12px;
+    background:var(--bg1); border-bottom:1px solid var(--border); font-size:12px; }
+  .top-bar-proj { font-size:12px; color:var(--text2); }
+  .top-bar-proj strong { color:var(--text1); }
+  .top-bar-sep { color:var(--text3); }
+  .tb-spacer { flex:1; }
+  .btn-run { background:var(--green); color:#0a1a12; border:none; padding:6px 16px;
+    border-radius:6px; font-size:12px; font-weight:600; cursor:pointer;
+    font-family:var(--font); display:flex; align-items:center; gap:5px; }
+  .btn-sm { background:var(--bg3); color:var(--text2); border:1px solid var(--border);
+    padding:5px 11px; border-radius:6px; font-size:11px; cursor:pointer; font-family:var(--font); }
+
+  .canvas-main { display:grid; grid-template-columns:145px 1fr 180px 280px; overflow:hidden; }
+
+  .left-rail { background:var(--bg1); border-right:1px solid var(--border);
+    padding:10px 7px; overflow-y:auto; }
+  .rail-section { margin-bottom:14px; }
+  .rail-section-title { font-size:9px; font-weight:500; color:var(--text3);
+    text-transform:uppercase; letter-spacing:0.7px; padding:0 4px; margin-bottom:5px; }
+  .block-pill { display:flex; align-items:center; gap:7px; padding:5px 7px;
+    border-radius:5px; font-size:10.5px; color:var(--text2); cursor:grab;
+    margin-bottom:1px; transition:all 0.12s; }
+  .block-pill:hover { background:var(--bg3); color:var(--text1); }
+  .block-pill-dot { width:5px; height:5px; border-radius:2px; flex-shrink:0; }
+  .dot-data { background:var(--blue); } .dot-clean { background:var(--amber); }
+  .dot-signal { background:var(--accent); } .dot-model { background:var(--green); }
+  .dot-eval { background:var(--red); }
+
+  .canvas-center { background:var(--bg0); position:relative; overflow:hidden;
+    background-image:radial-gradient(circle,rgba(255,255,255,0.04) 1px,transparent 1px);
+    background-size:24px 24px; }
+
+  .node { position:absolute; width:130px; background:var(--bg2);
+    border:1px solid var(--border2); border-radius:7px; font-size:10px; cursor:pointer; transition:border-color 0.15s; }
+  .node:hover { border-color:rgba(255,255,255,0.25); }
+  .node.selected { border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-dim); }
+  .node.gemini-suggested { border-color:var(--gemini-solid); box-shadow:0 0 0 2px var(--gemini-solid-dim); }
+  .node-header { padding:6px 8px 4px; border-bottom:1px solid var(--border);
+    display:flex; align-items:center; gap:5px; }
+  .node-type-dot { width:5px; height:5px; border-radius:50%; flex-shrink:0; }
+  .node-type { font-size:8px; color:var(--text3); flex:1; font-family:var(--mono); letter-spacing:0.3px; }
+  .node-status { width:6px; height:6px; border-radius:50%; }
+  .ns-green { background:var(--green); } .ns-blue { background:var(--blue); }
+  .ns-gray { background:var(--text3); } .ns-red { background:var(--red); }
+  .ns-pulse { background:var(--gemini-solid); }
+  .node-body { padding:5px 8px 6px; }
+  .node-name { font-size:11px; font-weight:500; color:var(--text1); margin-bottom:2px; }
+  .node-param { font-size:9px; color:var(--text3); font-family:var(--mono); }
+  .node-port-left, .node-port-right { position:absolute; top:50%; transform:translateY(-50%);
+    width:7px; height:7px; border-radius:50%; background:var(--bg4); border:1px solid var(--border2); }
+  .node-port-left { left:-4px; } .node-port-right { right:-4px; }
+
+  .edge-svg { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; }
+
+  .right-rail { background:var(--bg1); border-left:1px solid var(--border);
+    overflow-y:auto; font-size:11px; }
+  .rr-tabs { display:flex; border-bottom:1px solid var(--border); }
+  .rr-tab { flex:1; padding:8px 4px; font-size:10px; font-weight:500;
+    text-align:center; color:var(--text3); cursor:pointer;
+    border-bottom:2px solid transparent; transition:all 0.15s; }
+  .rr-tab.active { color:var(--text1); border-bottom-color:var(--accent); }
+  .rr-body { padding:10px; }
+  .quality-row { display:flex; justify-content:space-between; align-items:center;
+    padding:4px 0; border-bottom:1px solid var(--border); }
+  .quality-row:last-child { border-bottom:none; }
+  .q-label { font-size:10px; color:var(--text2); }
+  .q-value { font-size:10px; font-family:var(--mono); color:var(--text1); }
+  .q-badge { font-size:9px; padding:1px 5px; border-radius:3px; }
+  .q-ok { background:var(--green-dim); color:var(--green); }
+  .q-warn { background:var(--amber-dim); color:var(--amber); }
+  .metric-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:8px; }
+  .metric-card { background:var(--bg2); border-radius:5px; padding:6px 8px; border:1px solid var(--border); }
+  .metric-label { font-size:8px; color:var(--text3); text-transform:uppercase; letter-spacing:0.4px; margin-bottom:2px; }
+  .metric-value { font-size:15px; font-weight:300; color:var(--text1); font-family:var(--mono); }
+  .metric-value.pos { color:var(--green); } .metric-value.neg { color:var(--red); }
+
+  .copilot { background:var(--bg1); border-left:1px solid var(--border);
+    display:flex; flex-direction:column; overflow:hidden; }
+  .cp-header { padding:9px 12px; border-bottom:1px solid var(--border);
+    display:flex; align-items:center; gap:8px; background:var(--bg2); }
+  .cp-avatar { width:20px; height:20px; border-radius:50%;
+    background:var(--gemini); display:flex; align-items:center; justify-content:center;
+    font-size:10px; font-weight:600; color:#fff; }
+  .cp-title { font-size:12px; font-weight:500; color:var(--text1); }
+  .cp-title-sub { font-size:9px; color:var(--text3); font-family:var(--mono); }
+  .cp-spacer { flex:1; }
+  .cp-icon-btn { width:22px; height:22px; border-radius:5px;
+    display:flex; align-items:center; justify-content:center;
+    color:var(--text3); cursor:pointer; background:none; border:none; }
+  .cp-icon-btn:hover { background:var(--bg3); color:var(--text1); }
+
+  .cp-context { padding:6px 12px; background:rgba(34,211,238,0.05);
+    border-bottom:1px solid var(--border); font-size:10px; color:var(--gemini-solid);
+    display:flex; align-items:center; gap:6px; }
+  .cp-context-dot { width:4px; height:4px; border-radius:50%; background:var(--gemini-solid); }
+
+  .cp-modes { display:flex; gap:3px; padding:6px 10px; border-bottom:1px solid var(--border); }
+  .cp-mode { flex:1; padding:5px 6px; font-size:10px; font-weight:500;
+    color:var(--text2); cursor:pointer; border-radius:5px; text-align:center;
+    background:var(--bg2); border:1px solid var(--border); }
+  .cp-mode:hover { color:var(--text1); }
+  .cp-mode.active { color:var(--text1); background:var(--bg3);
+    border-color:rgba(139,125,255,0.35); }
+
+  .cp-thread { flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:12px; }
+  .msg { display:flex; flex-direction:column; gap:5px; }
+  .msg-role { font-size:9px; color:var(--text3); text-transform:uppercase;
+    letter-spacing:0.5px; font-family:var(--mono); display:flex; align-items:center; gap:5px; }
+  .msg-role-dot { width:5px; height:5px; border-radius:50%; }
+  .msg-role-dot.user { background:var(--blue); }
+  .msg-role-dot.agent { background:var(--gemini-solid); }
+  .msg-body { font-size:11px; line-height:1.55; color:var(--text1); }
+  .msg-body.user-msg { background:var(--bg2); padding:7px 10px; border-radius:8px 8px 2px 8px;
+    align-self:flex-end; max-width:85%; border:1px solid var(--border); }
+
+  .tool-pill { display:inline-flex; align-items:center; gap:6px;
+    background:var(--bg3); border:1px solid var(--border2);
+    border-radius:11px; padding:3px 9px; font-size:10px;
+    color:var(--text2); font-family:var(--mono); }
+  .tool-pill-icon { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+  .tool-pill-icon.search { background:var(--blue); }
+  .tool-pill-icon.market { background:var(--green); }
+  .tool-pill-icon.template { background:var(--accent); }
+  .tool-pill-icon.debug { background:var(--red); }
+  .tool-pill.done { border-color:rgba(45,212,160,0.3); }
+  .tool-pill-stat { color:var(--text3); margin-left:auto; }
+
+  .citations { display:flex; flex-wrap:wrap; gap:4px; margin-top:4px; }
+  .citation { display:inline-flex; align-items:center; gap:4px;
+    background:var(--bg2); border:1px solid var(--border);
+    border-radius:10px; padding:2px 7px 2px 4px; font-size:9px; color:var(--text2);
+    cursor:pointer; font-family:var(--mono); }
+  .citation:hover { color:var(--text1); border-color:var(--border2); }
+  .citation-num { width:12px; height:12px; border-radius:50%;
+    background:var(--accent-dim); color:var(--accent); font-size:8px;
+    display:flex; align-items:center; justify-content:center; font-weight:500; }
+
+  .applied-banner { background:rgba(45,212,160,0.08); border:1px solid rgba(45,212,160,0.25);
+    border-radius:6px; padding:6px 9px; font-size:10px; color:var(--green);
+    display:flex; align-items:center; gap:6px; }
+
+  .cp-composer { padding:10px; border-top:1px solid var(--border); background:var(--bg2); }
+  .cp-attach-chips { display:flex; gap:4px; margin-bottom:6px; flex-wrap:wrap; }
+  .attach-chip { display:inline-flex; align-items:center; gap:5px;
+    background:var(--bg3); border:1px solid var(--border2);
+    border-radius:5px; padding:3px 7px; font-size:9px; color:var(--text2); font-family:var(--mono); }
+  .attach-chip-close { color:var(--text3); cursor:pointer; font-size:11px; }
+  .attach-chip-icon { width:10px; height:10px; display:inline-block;
+    background:var(--amber); border-radius:2px; }
+  .attach-chip-icon.img { background:var(--accent); }
+
+  .composer-box { background:var(--bg3); border:1px solid var(--border2);
+    border-radius:8px; padding:7px 8px; display:flex; flex-direction:column; gap:6px; }
+  .composer-input { width:100%; background:none; border:none; color:var(--text1);
+    font-size:11px; font-family:var(--font); outline:none; resize:none; min-height:18px; }
+  .composer-input::placeholder { color:var(--text3); }
+  .composer-toolbar { display:flex; align-items:center; gap:4px; }
+  .tb-btn { width:22px; height:22px; border-radius:5px; display:flex;
+    align-items:center; justify-content:center; color:var(--text3);
+    cursor:pointer; background:none; border:none; font-size:12px; }
+  .tb-btn:hover { background:var(--bg4); color:var(--text1); }
+  .slash-hint { font-size:9px; color:var(--text3); font-family:var(--mono); margin-left:auto; }
+  .send-btn { background:var(--accent); color:#fff; border:none;
+    width:24px; height:22px; border-radius:5px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; font-size:11px; }
+
+  .bottom-drawer { background:var(--bg1); border-top:1px solid var(--border);
+    display:grid; grid-template-columns:1fr 1fr; }
+  .drawer-pane { padding:7px 12px; overflow:hidden; }
+  .drawer-pane:first-child { border-right:1px solid var(--border); }
+  .drawer-header { font-size:10px; font-weight:500; color:var(--text3);
+    text-transform:uppercase; letter-spacing:0.7px; margin-bottom:7px;
+    display:flex; align-items:center; gap:6px; }
+  .registry-row { display:flex; align-items:center; gap:8px; padding:2px 0;
+    font-size:10px; font-family:var(--mono); color:var(--text2); border-bottom:1px solid var(--border); }
+  .registry-row:last-child { border-bottom:none; }
+  .reg-name { color:var(--blue); flex:1; }
+  .reg-shape { color:var(--text3); }
+  .console-line { font-size:10px; font-family:var(--mono); padding:1px 0; display:flex; gap:8px; }
+  .con-ts { color:var(--text3); flex-shrink:0; }
+  .con-ok { color:var(--green); } .con-warn { color:var(--amber); }
+  .con-err { color:var(--red); } .con-info { color:var(--blue); }
+  .con-err-action { color:var(--gemini-solid); text-decoration:underline; cursor:pointer; margin-left:6px; }
+
+  .fab-copilot { position:absolute; right:16px; bottom:16px;
+    background:var(--gemini); color:#fff; border:none; border-radius:50%;
+    width:44px; height:44px; font-size:16px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; font-weight:600; }
+
+  .copilot-side { background:var(--bg1); border:1px solid var(--border);
+    border-radius:10px; display:flex; flex-direction:column; overflow:hidden; min-height:560px; }
+
+  .gallery-page { padding:24px; background:var(--bg0); min-height:620px; display:grid; grid-template-columns:1fr 320px; gap:18px; }
+  .gallery-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:16px; }
+  .gallery-card { background:var(--bg2); border:1px solid var(--border);
+    border-radius:10px; overflow:hidden; cursor:pointer; transition:all 0.15s; }
+  .gallery-card:hover { border-color:var(--accent); }
+  .gallery-preview { height:110px; position:relative; overflow:hidden; padding:8px; background:var(--bg1); }
+  .gallery-info { padding:11px 12px; border-top:1px solid var(--border); }
+  .gallery-name { font-size:12px; font-weight:500; color:var(--text1); margin-bottom:3px; }
+  .gallery-desc { font-size:10px; color:var(--text2); line-height:1.5; margin-bottom:7px; }
+  .gallery-stats { display:flex; gap:10px; }
+  .gstat { font-size:9px; font-family:var(--mono); }
+  .gstat-label { color:var(--text3); }
+  .gstat-value { color:var(--green); font-weight:500; }
+  .mini-node { position:absolute; background:var(--bg3); border:1px solid var(--border2);
+    border-radius:4px; padding:3px 6px; font-size:8px; font-family:var(--mono); color:var(--text2); white-space:nowrap; }
+  .mini-node.n-data { border-left:2px solid var(--blue); }
+  .mini-node.n-clean { border-left:2px solid var(--amber); }
+  .mini-node.n-signal { border-left:2px solid var(--accent); }
+  .mini-node.n-eval { border-left:2px solid var(--green); }
+
+  @keyframes thinking-pulse {
+    0%,100% { opacity:0.3; }
+    50% { opacity:1; }
+  }
+  .thinking-dot { animation:thinking-pulse 1.2s ease-in-out infinite; }
+  .thinking-dot:nth-child(2) { animation-delay:0.2s; }
+  .thinking-dot:nth-child(3) { animation-delay:0.4s; }
+</style>
+
+<div class="wrapper">
+  <div class="nav-bar">
+    <span class="nav-logo">Ez<span>Quant</span></span>
+    <button class="nav-tab active" onclick="showPage('projects')">Projects</button>
+    <button class="nav-tab" onclick="showPage('canvas')">Canvas</button>
+    <button class="nav-tab" onclick="showPage('gallery')">Templates</button>
+    <div style="margin-left:auto; display:flex; align-items:center; gap:8px;">
+      <span class="kbd-hint">⌘K</span>
+      <button class="copilot-toggle">
+        <div class="dot"></div>
+        Quant Copilot
+      </button>
+    </div>
+  </div>
+
+  <div class="page active" id="page-projects">
+    <div class="projects-page">
+      <div>
+        <div class="page-header">
+          <div>
+            <div class="page-title">Research Projects</div>
+            <div class="page-subtitle">Your saved pipelines</div>
+          </div>
+          <button class="btn-primary" onclick="showPage('canvas')">+ New Pipeline</button>
+        </div>
+        <div class="section-label">Quick start — templates</div>
+        <div class="templates-row">
+          <div class="template-card tpl-mom" onclick="showPage('canvas')">
+            <div class="tpl-icon">↗</div>
+            <div class="tpl-name">Momentum Signal</div>
+            <div class="tpl-desc">EMA crossover on daily log returns with threshold</div>
+            <div class="tpl-badge green">Sharpe 1.24</div>
+          </div>
+          <div class="template-card tpl-pairs" onclick="showPage('canvas')">
+            <div class="tpl-icon">↔</div>
+            <div class="tpl-name">Pairs Trade</div>
+            <div class="tpl-desc">Rolling correlation mean-reversion on two tickers</div>
+            <div class="tpl-badge blue">Sharpe 0.89</div>
+          </div>
+          <div class="template-card tpl-vol" onclick="showPage('canvas')">
+            <div class="tpl-icon">⚡</div>
+            <div class="tpl-name">Vol Breakout</div>
+            <div class="tpl-desc">Z-score vol regime filter with momentum entry</div>
+            <div class="tpl-badge amber">Sharpe 1.07</div>
+          </div>
+        </div>
+        <div class="section-label">Saved projects</div>
+        <div class="projects-grid">
+          <div class="project-card" onclick="showPage('canvas')">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:5px;">
+              <div class="proj-name">AAPL Momentum</div>
+              <div class="proj-status green"></div>
+            </div>
+            <div class="proj-sharpe">1.24</div>
+            <div class="proj-sharpe-label">Sharpe</div>
+            <div class="proj-footer">
+              <span class="proj-meta">5 blocks</span>
+              <span class="proj-ts">2h ago</span>
+            </div>
+          </div>
+          <div class="project-card" onclick="showPage('canvas')">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:5px;">
+              <div class="proj-name">SPY vs QQQ Pairs</div>
+              <div class="proj-status amber"></div>
+            </div>
+            <div class="proj-sharpe">0.71</div>
+            <div class="proj-sharpe-label">Sharpe</div>
+            <div class="proj-footer">
+              <span class="proj-meta">8 blocks</span>
+              <span class="proj-ts">1d ago</span>
+            </div>
+          </div>
+          <div class="project-card" onclick="showPage('canvas')">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:5px;">
+              <div class="proj-name">BTC Vol Filter</div>
+              <div class="proj-status green"></div>
+            </div>
+            <div class="proj-sharpe neg">-0.32</div>
+            <div class="proj-sharpe-label">Sharpe</div>
+            <div class="proj-footer">
+              <span class="proj-meta">7 blocks</span>
+              <span class="proj-ts">3d ago</span>
+            </div>
+          </div>
+          <div class="project-card" onclick="showPage('canvas')">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:5px;">
+              <div class="proj-name">NVDA Momentum</div>
+              <div class="proj-status green"></div>
+            </div>
+            <div class="proj-sharpe">1.67</div>
+            <div class="proj-sharpe-label">Sharpe</div>
+            <div class="proj-footer">
+              <span class="proj-meta">6 blocks</span>
+              <span class="proj-ts">5h ago</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="copilot-side">
+        <div class="cp-header">
+          <div class="cp-avatar">✦</div>
+          <div>
+            <div class="cp-title">Quant Copilot</div>
+            <div class="cp-title-sub">gemini-2.0-flash · rag</div>
+          </div>
+          <div class="cp-spacer"></div>
+          <button class="cp-icon-btn" title="History">⟲</button>
+        </div>
+        <div class="cp-context">
+          <div class="cp-context-dot"></div>
+          Context: Projects page · 4 saved pipelines
+        </div>
+        <div class="cp-modes">
+          <div class="cp-mode active">Ask</div>
+          <div class="cp-mode">Suggest</div>
+          <div class="cp-mode">Debug</div>
+        </div>
+        <div class="cp-thread">
+          <div class="msg">
+            <div class="msg-role"><div class="msg-role-dot agent"></div>Copilot</div>
+            <div class="msg-body">Hey! I can answer finance questions, suggest pipeline templates, or help debug errors. Try asking about one of your saved projects, or try <span style="color:var(--gemini-solid); font-family:var(--mono);">/template momentum NVDA</span>.</div>
+          </div>
+          <div class="msg">
+            <div class="msg-body user-msg">What's a good Sharpe ratio for a momentum signal?</div>
+          </div>
+          <div class="msg">
+            <div class="msg-role"><div class="msg-role-dot agent"></div>Copilot</div>
+            <div class="tool-pill done">
+              <div class="tool-pill-icon search"></div>
+              search_knowledge
+              <span class="tool-pill-stat">4 chunks · 0.3s</span>
+            </div>
+            <div class="msg-body">For daily-bar momentum strategies on liquid equities, an out-of-sample Sharpe between 0.8 and 1.5 is realistic. Your AAPL project at 1.24 is in healthy territory. Anything above 2.0 on vanilla momentum should raise suspicion about lookahead bias or overfitting.</div>
+            <div class="citations">
+              <div class="citation"><div class="citation-num">1</div>finance_glossary.md</div>
+              <div class="citation"><div class="citation-num">2</div>hrt_benchmarks_blog</div>
+              <div class="citation"><div class="citation-num">3</div>js_signals_ema.md</div>
+            </div>
+          </div>
+        </div>
+        <div class="cp-composer">
+          <div class="composer-box">
+            <textarea class="composer-input" placeholder="Ask anything, or /template /ask /debug" rows="1"></textarea>
+            <div class="composer-toolbar">
+              <button class="tb-btn" title="Attach image">🖼</button>
+              <button class="tb-btn" title="Attach PDF">📎</button>
+              <span class="slash-hint">/ for commands</span>
+              <button class="send-btn">↑</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="page" id="page-canvas">
+    <div class="canvas-page">
+      <div class="top-bar">
+        <span class="top-bar-proj"><strong>NVDA Momentum</strong></span>
+        <span class="top-bar-sep">/</span>
+        <span style="font-size:11px; color:var(--text3);">5 blocks · gemini-suggested · not yet run</span>
+        <div class="tb-spacer"></div>
+        <button class="btn-sm" onclick="showPage('projects')">← Projects</button>
+        <button class="btn-sm">Save</button>
+        <button class="btn-run" id="run-btn" onclick="triggerRun()">▶ Run</button>
+      </div>
+
+      <div class="canvas-main">
+        <div class="left-rail">
+          <div class="rail-section">
+            <div class="rail-section-title">Data</div>
+            <div class="block-pill"><div class="block-pill-dot dot-data"></div>Ticker Source</div>
+            <div class="block-pill"><div class="block-pill-dot dot-data"></div>CSV Upload</div>
+            <div class="block-pill" style="opacity:0.5;"><div class="block-pill-dot dot-data"></div>Live Poll</div>
+          </div>
+          <div class="rail-section">
+            <div class="rail-section-title">Clean</div>
+            <div class="block-pill"><div class="block-pill-dot dot-clean"></div>Drop NA</div>
+            <div class="block-pill"><div class="block-pill-dot dot-clean"></div>Log Returns</div>
+            <div class="block-pill"><div class="block-pill-dot dot-clean"></div>Resample</div>
+            <div class="block-pill"><div class="block-pill-dot dot-clean"></div>Z-Score</div>
+            <div class="block-pill" style="opacity:0.5;"><div class="block-pill-dot dot-clean"></div>Lookahead Guard</div>
+          </div>
+          <div class="rail-section">
+            <div class="rail-section-title">Signal</div>
+            <div class="block-pill"><div class="block-pill-dot dot-signal"></div>EMA</div>
+            <div class="block-pill"><div class="block-pill-dot dot-signal"></div>EMS</div>
+            <div class="block-pill"><div class="block-pill-dot dot-signal"></div>Momentum</div>
+            <div class="block-pill"><div class="block-pill-dot dot-signal"></div>Rolling Corr</div>
+          </div>
+          <div class="rail-section">
+            <div class="rail-section-title">Model</div>
+            <div class="block-pill"><div class="block-pill-dot dot-model"></div>Linear Reg</div>
+            <div class="block-pill"><div class="block-pill-dot dot-model"></div>Threshold Sig</div>
+          </div>
+          <div class="rail-section">
+            <div class="rail-section-title">Evaluate</div>
+            <div class="block-pill"><div class="block-pill-dot dot-eval"></div>Backtest</div>
+            <div class="block-pill"><div class="block-pill-dot dot-eval"></div>Equity Curve</div>
+          </div>
+        </div>
+
+        <div class="canvas-center" id="canvas-center">
+          <svg class="edge-svg" id="edge-svg"></svg>
+          <div class="canvas-nodes" id="canvas-nodes"></div>
+          <div style="position:absolute; top:10px; left:12px; font-size:10px;
+            color:var(--gemini-solid); font-family:var(--mono);
+            background:var(--gemini-solid-dim); border:1px solid rgba(34,211,238,0.25);
+            border-radius:5px; padding:3px 8px; display:flex; align-items:center; gap:5px;">
+            <span style="font-size:11px;">✦</span>
+            Generated by Copilot
+          </div>
+          <div style="position:absolute; bottom:12px; right:12px; font-size:10px;
+            color:var(--text3); font-family:var(--mono);">⌘↵ run · ⌘K copilot</div>
+        </div>
+
+        <div class="right-rail">
+          <div class="rr-tabs">
+            <div class="rr-tab active">Data</div>
+            <div class="rr-tab">Params</div>
+            <div class="rr-tab">Eval</div>
+          </div>
+          <div class="rr-body">
+            <div style="font-size:11px; font-weight:500; color:var(--text1); margin-bottom:8px;">NVDA · daily</div>
+            <div class="quality-row"><span class="q-label">Rows</span><span class="q-value">1,008</span></div>
+            <div class="quality-row"><span class="q-label">Range</span><span class="q-value">20-01 → 24-01</span></div>
+            <div class="quality-row"><span class="q-label">Missing</span><span class="q-badge q-ok">0</span></div>
+            <div class="quality-row"><span class="q-label">NaNs</span><span class="q-badge q-ok">Clean</span></div>
+            <div class="quality-row"><span class="q-label">Lookahead</span><span class="q-badge q-warn">Check</span></div>
+            <div style="margin-top:10px; height:36px; background:var(--bg2); border:1px solid var(--border); border-radius:5px; padding:3px; position:relative; overflow:hidden;">
+              <svg width="100%" height="30">
+                <polyline points="0,26 18,23 36,24 54,18 72,20 90,14 108,17 126,10 144,8 160,4" fill="none" stroke="var(--green)" stroke-width="1.3"/>
+              </svg>
+              <div style="position:absolute; bottom:3px; right:6px; font-size:8px; color:var(--green); font-family:var(--mono);">NVDA +84%</div>
+            </div>
+            <div style="margin-top:12px; padding-top:10px; border-top:1px solid var(--border);">
+              <div style="font-size:9px; color:var(--text3); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:5px;">Metrics preview</div>
+              <div class="metric-grid">
+                <div class="metric-card">
+                  <div class="metric-label">Sharpe</div>
+                  <div class="metric-value pos" style="font-size:14px;">—</div>
+                </div>
+                <div class="metric-card">
+                  <div class="metric-label">Max DD</div>
+                  <div class="metric-value" style="font-size:14px; color:var(--text3);">—</div>
+                </div>
+              </div>
+              <div style="font-size:9px; color:var(--text3); text-align:center; margin-top:4px;">Run pipeline to populate</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="copilot">
+          <div class="cp-header">
+            <div class="cp-avatar">✦</div>
+            <div>
+              <div class="cp-title">Quant Copilot</div>
+              <div class="cp-title-sub">gemini-2.0-flash · agent</div>
+            </div>
+            <div class="cp-spacer"></div>
+            <button class="cp-icon-btn" title="Clear">⟲</button>
+          </div>
+          <div class="cp-context">
+            <div class="cp-context-dot"></div>
+            Context: Canvas · NVDA Momentum · 5 blocks
+          </div>
+          <div class="cp-modes">
+            <div class="cp-mode">Ask</div>
+            <div class="cp-mode active">Suggest</div>
+            <div class="cp-mode">Debug</div>
+          </div>
+          <div class="cp-thread">
+            <div class="msg">
+              <div class="msg-body user-msg">Backtest a momentum strategy on NVDA</div>
+            </div>
+
+            <div class="msg">
+              <div class="msg-role"><div class="msg-role-dot agent"></div>Copilot</div>
+              <div class="tool-pill done">
+                <div class="tool-pill-icon search"></div>
+                search_knowledge
+                <span class="tool-pill-stat">3 templates · 0.4s</span>
+              </div>
+              <div class="tool-pill done">
+                <div class="tool-pill-icon market"></div>
+                get_live_market_data
+                <span class="tool-pill-stat">NVDA · 252 rows</span>
+              </div>
+              <div class="tool-pill done">
+                <div class="tool-pill-icon template"></div>
+                suggest_pipeline_template
+                <span class="tool-pill-stat">5 blocks · json</span>
+              </div>
+              <div class="msg-body">I put together a 5-block pipeline — fetch NVDA, compute log returns, apply a 20-day EMA, threshold to positions, and backtest. Span=20 is a common starting point; try 50 for slower signals.</div>
+              <div class="applied-banner">
+                <span style="font-size:11px;">✦</span>
+                Applied to canvas — review and hit Run
+              </div>
+              <div class="citations">
+                <div class="citation"><div class="citation-num">1</div>momentum_template</div>
+                <div class="citation"><div class="citation-num">2</div>js_signals_ema</div>
+              </div>
+            </div>
+
+            <div class="msg">
+              <div class="msg-body user-msg">
+                <div style="margin-bottom:4px;">Why span=20 and not 50?</div>
+              </div>
+            </div>
+
+            <div class="msg">
+              <div class="msg-role"><div class="msg-role-dot agent"></div>Copilot</div>
+              <div class="tool-pill done">
+                <div class="tool-pill-icon search"></div>
+                search_knowledge
+                <span class="tool-pill-stat">5 chunks · 0.3s</span>
+              </div>
+              <div class="msg-body">Span=20 roughly matches a monthly lookback on daily data — the standard "medium-term momentum" horizon that's worked historically on US equities. Span=50 is slower, better if you want to reduce turnover at the cost of signal speed. You could A/B them with two EMA blocks.</div>
+            </div>
+
+          </div>
+          <div class="cp-composer">
+            <div class="cp-attach-chips">
+              <div class="attach-chip">
+                <div class="attach-chip-icon img"></div>
+                chart_screenshot.png
+                <span class="attach-chip-close">×</span>
+              </div>
+            </div>
+            <div class="composer-box">
+              <textarea class="composer-input" placeholder="Ask about this pipeline, attach a chart, or /debug" rows="1"></textarea>
+              <div class="composer-toolbar">
+                <button class="tb-btn" title="Attach image">🖼</button>
+                <button class="tb-btn" title="Attach PDF">📎</button>
+                <span class="slash-hint">/ for commands</span>
+                <button class="send-btn">↑</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bottom-drawer">
+        <div class="drawer-pane">
+          <div class="drawer-header"><span style="color:var(--blue)">▣</span> Registry</div>
+          <div class="registry-row"><span class="reg-name">nvda_1.df</span><span class="reg-shape">(252, 6)</span><span style="font-size:9px; color:var(--text3);">pending</span></div>
+          <div class="registry-row"><span class="reg-name">log_ret_1.df</span><span class="reg-shape">—</span><span style="font-size:9px; color:var(--text3);">pending</span></div>
+          <div class="registry-row"><span class="reg-name">ema_1.df</span><span class="reg-shape">—</span><span style="font-size:9px; color:var(--text3);">pending</span></div>
+          <div class="registry-row"><span class="reg-name">thresh_1.df</span><span class="reg-shape">—</span><span style="font-size:9px; color:var(--text3);">pending</span></div>
+          <div class="registry-row"><span class="reg-name">backtest_1.df</span><span class="reg-shape">—</span><span style="font-size:9px; color:var(--text3);">pending</span></div>
+        </div>
+        <div class="drawer-pane">
+          <div class="drawer-header"><span style="color:var(--accent)">›_</span> Console</div>
+          <div class="console-line"><span class="con-ts">14:22:01</span><span class="con-info">✦ Copilot applied template: momentum_nvda</span></div>
+          <div class="console-line"><span class="con-ts">14:22:01</span><span class="con-info">Pipeline loaded · 5 nodes · 6 edges</span></div>
+          <div class="console-line"><span class="con-ts">14:22:02</span><span class="con-warn">⚠ Potential lookahead in ema_1 — <span class="con-err-action">ask copilot</span></span></div>
+          <div class="console-line"><span class="con-ts">14:22:02</span><span class="con-ok">Schema validated. Ready to run.</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="page" id="page-gallery">
+    <div class="gallery-page">
+      <div>
+        <div class="page-header">
+          <div>
+            <div class="page-title">Template Gallery</div>
+            <div class="page-subtitle">Pre-wired pipelines — or ask Copilot to generate one</div>
+          </div>
+        </div>
+        <div class="gallery-grid">
+          <div class="gallery-card" onclick="showPage('canvas')">
+            <div class="gallery-preview">
+              <svg class="edge-svg" style="pointer-events:none;">
+                <path d="M 55 30 C 80 30, 80 55, 105 55" stroke="rgba(255,255,255,0.1)" stroke-width="1" fill="none"/>
+                <path d="M 105 55 C 130 55, 130 30, 155 30" stroke="rgba(255,255,255,0.1)" stroke-width="1" fill="none"/>
+                <path d="M 155 30 C 180 30, 180 55, 205 55" stroke="rgba(255,255,255,0.1)" stroke-width="1" fill="none"/>
+              </svg>
+              <div class="mini-node n-data" style="left:6px; top:18px;">Ticker AAPL</div>
+              <div class="mini-node n-clean" style="left:90px; top:46px;">Log Returns</div>
+              <div class="mini-node n-signal" style="left:158px; top:18px;">EMA-20</div>
+              <div class="mini-node n-eval" style="left:210px; top:46px;">Backtest</div>
+            </div>
+            <div class="gallery-info">
+              <div class="gallery-name">Momentum Signal</div>
+              <div class="gallery-desc">EMA crossover on daily log returns. Classic trend-following primitive.</div>
+              <div class="gallery-stats">
+                <span class="gstat"><span class="gstat-label">Sharpe </span><span class="gstat-value">1.24</span></span>
+                <span class="gstat"><span class="gstat-label">5 blocks</span></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="gallery-card" onclick="showPage('canvas')">
+            <div class="gallery-preview">
+              <svg class="edge-svg" style="pointer-events:none;">
+                <path d="M 60 22 C 85 22, 85 50, 110 50" stroke="rgba(96,165,250,0.2)" stroke-width="1" fill="none"/>
+                <path d="M 60 78 C 85 78, 85 50, 110 50" stroke="rgba(96,165,250,0.2)" stroke-width="1" fill="none"/>
+                <path d="M 175 50 C 195 50, 195 50, 215 50" stroke="rgba(96,165,250,0.2)" stroke-width="1" fill="none"/>
+              </svg>
+              <div class="mini-node n-data" style="left:4px; top:10px;">SPY</div>
+              <div class="mini-node n-data" style="left:4px; top:68px;">QQQ</div>
+              <div class="mini-node n-signal" style="left:115px; top:40px;">Roll Corr</div>
+              <div class="mini-node n-eval" style="left:215px; top:40px;">Backtest</div>
+            </div>
+            <div class="gallery-info">
+              <div class="gallery-name">Pairs Trade</div>
+              <div class="gallery-desc">Mean-reversion on rolling correlation spread between correlated tickers.</div>
+              <div class="gallery-stats">
+                <span class="gstat"><span class="gstat-label">Sharpe </span><span class="gstat-value">0.89</span></span>
+                <span class="gstat"><span class="gstat-label">6 blocks</span></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="gallery-card" onclick="showPage('canvas')">
+            <div class="gallery-preview">
+              <div class="mini-node n-data" style="left:4px; top:14px;">Ticker</div>
+              <div class="mini-node n-clean" style="left:4px; top:62px;">Log Ret</div>
+              <div class="mini-node n-signal" style="left:100px; top:30px;">Volatility</div>
+              <div class="mini-node n-signal" style="left:100px; top:72px;">Momentum</div>
+              <div class="mini-node n-eval" style="left:200px; top:48px;">Backtest</div>
+            </div>
+            <div class="gallery-info">
+              <div class="gallery-name">Volatility Breakout</div>
+              <div class="gallery-desc">Z-score vol regime filter gating a momentum entry.</div>
+              <div class="gallery-stats">
+                <span class="gstat"><span class="gstat-label">Sharpe </span><span class="gstat-value">1.07</span></span>
+                <span class="gstat"><span class="gstat-label">7 blocks</span></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="gallery-card" style="border-color:var(--gemini-solid); background:linear-gradient(135deg,rgba(139,125,255,0.05),rgba(34,211,238,0.05));">
+            <div class="gallery-preview" style="display:flex; align-items:center; justify-content:center;">
+              <div style="text-align:center;">
+                <div style="font-size:22px; background:var(--gemini); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; margin-bottom:5px;">✦</div>
+                <div style="font-size:11px; color:var(--gemini-solid);">Generate with Copilot</div>
+              </div>
+            </div>
+            <div class="gallery-info">
+              <div class="gallery-name">Describe your strategy</div>
+              <div class="gallery-desc">Tell Copilot what you want — it'll build the pipeline for you.</div>
+              <div class="gallery-stats">
+                <span class="gstat"><span class="gstat-label">Powered by Gemini</span></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="copilot-side">
+        <div class="cp-header">
+          <div class="cp-avatar">✦</div>
+          <div>
+            <div class="cp-title">Quant Copilot</div>
+            <div class="cp-title-sub">gemini-2.0-flash · multimodal</div>
+          </div>
+          <div class="cp-spacer"></div>
+        </div>
+        <div class="cp-context">
+          <div class="cp-context-dot"></div>
+          Context: Template gallery · 3 loaded
+        </div>
+        <div class="cp-modes">
+          <div class="cp-mode">Ask</div>
+          <div class="cp-mode active">Suggest</div>
+          <div class="cp-mode">Debug</div>
+        </div>
+        <div class="cp-thread">
+          <div class="msg">
+            <div class="msg-body user-msg">
+              <div style="font-size:10px; color:var(--text3); margin-bottom:4px; font-family:var(--mono);">📎 research_report.pdf · 12 pages</div>
+              Can you build a pipeline based on this PDF?
+            </div>
+          </div>
+          <div class="msg">
+            <div class="msg-role"><div class="msg-role-dot agent"></div>Copilot</div>
+            <div class="tool-pill done">
+              <div class="tool-pill-icon search"></div>
+              ingest_document
+              <span class="tool-pill-stat">pdf · 47 chunks</span>
+            </div>
+            <div class="tool-pill done">
+              <div class="tool-pill-icon template"></div>
+              suggest_pipeline_template
+              <span class="tool-pill-stat">derived · 6 blocks</span>
+            </div>
+            <div class="msg-body">The paper describes a cross-sectional momentum factor with volatility adjustment. I built a 6-block version: OHLCV → log returns → 12-1 momentum → vol-adjust → threshold → backtest. Click to load it on a fresh canvas.</div>
+            <div style="margin-top:4px; display:flex; gap:6px;">
+              <button style="font-size:10px; background:var(--accent); color:#fff; border:none; padding:4px 10px; border-radius:5px; cursor:pointer; font-family:var(--font);">Load template</button>
+              <button style="font-size:10px; background:var(--bg3); color:var(--text2); border:1px solid var(--border2); padding:4px 10px; border-radius:5px; cursor:pointer; font-family:var(--font);">Explain more</button>
+            </div>
+            <div class="citations">
+              <div class="citation"><div class="citation-num">1</div>research_report.pdf p.4</div>
+              <div class="citation"><div class="citation-num">2</div>research_report.pdf p.8</div>
+              <div class="citation"><div class="citation-num">3</div>xsec_momentum.md</div>
+            </div>
+          </div>
+        </div>
+        <div class="cp-composer">
+          <div class="composer-box">
+            <textarea class="composer-input" placeholder="Describe a strategy or attach a paper..." rows="1"></textarea>
+            <div class="composer-toolbar">
+              <button class="tb-btn">🖼</button>
+              <button class="tb-btn">📎</button>
+              <span class="slash-hint">/ for commands</span>
+              <button class="send-btn">↑</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function showPage(name) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    document.getElementById('page-' + name).classList.add('active');
+    const tabs = document.querySelectorAll('.nav-tab');
+    const map = { projects:0, canvas:1, gallery:2 };
+    if (map[name] !== undefined) tabs[map[name]].classList.add('active');
+    if (name === 'canvas') renderCanvas();
+  }
+
+  const NODES_DEF = [
+    { id:'n1', type:'DATA', label:'Ticker Source', param:'NVDA · 2020-24', x:10, y:40, statusClass:'ns-gray', dotColor:'#60a5fa', suggested:true },
+    { id:'n2', type:'CLEAN', label:'Log Returns', param:'col: Close', x:168, y:40, statusClass:'ns-gray', dotColor:'#fbbf24', suggested:true },
+    { id:'n3', type:'SIGNAL', label:'EMA', param:'span: 20', x:168, y:130, statusClass:'ns-gray', dotColor:'#8b7dff', suggested:true, selected:true },
+    { id:'n4', type:'MODEL', label:'Threshold Sig', param:'thresh: 0.0', x:326, y:85, statusClass:'ns-gray', dotColor:'#2dd4a0', suggested:true },
+    { id:'n5', type:'EVAL', label:'Backtest', param:'cost: 1bps', x:326, y:175, statusClass:'ns-gray', dotColor:'#f87171', suggested:true },
+  ];
+  const EDGES_DEF = [
+    { from:'n1', to:'n2' }, { from:'n1', to:'n3' },
+    { from:'n2', to:'n4' }, { from:'n3', to:'n4' }, { from:'n4', to:'n5' },
+  ];
+
+  function renderCanvas() {
+    const container = document.getElementById('canvas-nodes');
+    const svg = document.getElementById('edge-svg');
+    if (container.children.length > 0) return;
+    const pos = {};
+    NODES_DEF.forEach(n => {
+      const el = document.createElement('div');
+      el.className = 'node' + (n.selected ? ' selected' : '') + (n.suggested ? ' gemini-suggested' : '');
+      el.id = 'cnode-' + n.id;
+      el.style.left = n.x + 'px';
+      el.style.top = n.y + 'px';
+      el.innerHTML =
+        '<div class="node-header">' +
+          '<div class="node-type-dot" style="background:' + n.dotColor + '"></div>' +
+          '<span class="node-type">' + n.type + '</span>' +
+          '<div class="node-status ' + n.statusClass + '"></div>' +
+        '</div>' +
+        '<div class="node-body">' +
+          '<div class="node-name">' + n.label + '</div>' +
+          '<div class="node-param">' + n.param + '</div>' +
+        '</div>' +
+        '<div class="node-port-left"></div><div class="node-port-right"></div>';
+      container.appendChild(el);
+      pos[n.id] = { x:n.x, y:n.y };
+    });
+    const W=130, H=58;
+    let edges = '<defs><marker id="arr" markerWidth="6" markerHeight="4" refX="6" refY="2" orient="auto"><polygon points="0 0, 6 2, 0 4" fill="rgba(34,211,238,0.4)"/></marker></defs>';
+    EDGES_DEF.forEach(e => {
+      const f=pos[e.from], t=pos[e.to];
+      if (!f || !t) return;
+      const x1=f.x+W, y1=f.y+H/2, x2=t.x, y2=t.y+H/2;
+      const cx1=x1+(x2-x1)*0.5, cx2=x2-(x2-x1)*0.5;
+      edges += '<path d="M ' + x1 + ' ' + y1 + ' C ' + cx1 + ' ' + y1 + ', ' + cx2 + ' ' + y2 + ', ' + x2 + ' ' + y2 + '" fill="none" stroke="rgba(34,211,238,0.25)" stroke-width="1.3" stroke-dasharray="3 2" marker-end="url(#arr)"/>';
+    });
+    svg.innerHTML = edges;
+  }
+
+  function triggerRun() {
+    const btn = document.getElementById('run-btn');
+    btn.textContent = 'Running...';
+    btn.disabled = true;
+    const statuses = document.querySelectorAll('.canvas-nodes .node-status');
+    statuses.forEach(s => { s.className = 'node-status ns-blue'; });
+    let i = 0;
+    const seq = () => {
+      if (i < statuses.length) {
+        statuses[i].className = 'node-status ns-green';
+        i++;
+        setTimeout(seq, 280);
+      } else {
+        btn.textContent = '▶ Run';
+        btn.disabled = false;
+      }
+    };
+    setTimeout(seq, 220);
+  }
+
+  renderCanvas();
+</script>

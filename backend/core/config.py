@@ -1,0 +1,69 @@
+"""
+Centralized config. Uses pydantic-settings so env vars are typed and validated.
+ 
+Why this matters for a hackathon: you'll add the Gemini API key, the Supabase keys,
+a Polygon key (if you upgrade market data), etc. Having one place where config lives
+means you don't sprinkle os.getenv() calls across 10 files.
+"""
+from functools import lru_cache
+from typing import List
+
+from pydantic import AliasChoices, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+ 
+ 
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        # Read both — matches Next.js convention. Later files win.
+        env_file=(".env", ".env.local"),
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",  # don't crash on unknown env vars (e.g. NEXT_PUBLIC_*)
+    )
+ 
+    # --- Server ---
+    app_env: str = "dev"
+    log_level: str = "INFO"
+ 
+    # --- CORS ---
+    # Stored as a comma-separated string in env, exposed as a list.
+    cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
+ 
+    # --- Market data caching ---
+    market_cache_ttl_intraday: int = 60       # seconds
+    market_cache_ttl_daily: int = 60 * 60 * 24  # 24h
+ 
+    # --- Market data providers ---
+    # yfinance is the primary provider. It occasionally fails transiently — this
+    # controls how many times we retry the underlying call before giving up.
+    yfinance_max_retries: int = 2
+    yfinance_retry_backoff_seconds: float = 1.5
+
+    # --- OHLCV persistent cache (Supabase ohlcv_cache table) ---
+    ohlcv_cache_recent_window_days: int = 7
+    ohlcv_cache_ttl_recent_hours: int = 1
+    ohlcv_cache_ttl_historical_days: int = 30
+
+    # --- Supabase (backend-side, never shipped to browser) ---
+    supabase_url: str = Field(
+        default="",
+        validation_alias=AliasChoices("SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL"),
+    )
+    supabase_service_role_key: str = ""
+    supabase_jwt_secret: str = ""
+
+    # --- Gemini (agent + embeddings) ---
+    google_api_key: str = ""
+    gemini_model: str = "gemini-2.5-flash"
+    gemini_image_model: str = "gemini-2.5-flash-image"
+    gemini_embedding_model: str = "gemini-embedding-001"
+
+    @property
+    def cors_origins_list(self) -> List[str]:
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+ 
+ 
+@lru_cache
+def get_settings() -> Settings:
+    """Cached settings accessor. Import this, don't instantiate Settings directly."""
+    return Settings()
