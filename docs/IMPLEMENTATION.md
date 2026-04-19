@@ -172,3 +172,129 @@ python -m pytest backend/test_full_pipeline.py -v
 # Frontend types
 npx tsc --noEmit
 ```
+
+---
+
+## Agent / Copilot data flow (Loops 1 + 2)
+
+### Frontend → Backend
+```
+User types in CopilotPanel composer
+  → useCopilot.send()
+  → serializeCanvas(nodes, edges, lastRunResults)  // ≤7500 chars
+  → streamCopilotChat() (lib/api/copilot.ts)
+  → POST /api/agent/chat  { message, page_context, session_id, canvas_state, mode }
+      Authorization: Bearer <supabase access_token>
+```
+
+`session_id`: stable per `(user, projectId)` via `localStorage:ezq_chat_session:<projectId>`. Null project = `global` bucket.
+
+### Backend orchestrator loop
+```
+verify_jwt → user_id
+run_agent:
+  1. persist user turn to copilot_messages
+  2. build system_prompt(page_context, mode, canvas_state)
+  3. start chat with Gemini 2.0 Flash
+     - tools = [search_knowledge, suggest_pipeline_template]
+     - enable_automatic_function_calling=False
+     - safety = BLOCK_ONLY_HIGH (all four categories)
+  4. loop (max 5 tool turns):
+     a. send_message
+     b. for each text part → yield {type:'text', content}
+     c. for each function_call → yield tool_use (running) → execute tool
+        → yield tool_use (done) → append function_response
+     d. if no function_calls: break
+  5. emit {type:'citations', sources} (de-duplicated by source+page)
+  6. persist assistant turn to copilot_messages
+  7. yield {type:'done'}
+```
+
+### SSE event types shipped
+- `text` — streamed content
+- `tool_use` with `status: running|done`
+- `citations` with `sources: Citation[]`
+- `pipeline_template` with `template: {name, description, rationale, graph}`
+- `done`
+
+### Tools
+- **`search_knowledge(query, source_type?, recency_days?)`** → embeds query with `RETRIEVAL_QUERY`, calls `match_doc_chunks` RPC, returns top-8 chunks. Used for grounded Q&A.
+- **`suggest_pipeline_template(goal, ticker?, constraints?)`** → retrieves similar templates (if corpus has any with `source_type='pipeline_template'`), asks Gemini for a JSON graph via `response_mime_type='application/json'`, validates against the MVP block catalog, up to 2 retries on validator errors.
+
+### Canvas staging (Loop 2)
+```
+pipeline_template event
+  → useCopilot handler
+  → canvasStore.stagePipelineTemplate(template)
+    - nodes cloned with data.pending=true, data.source='copilot'
+    - edges cloned with data.pending=true
+    - pendingTemplate stored
+Canvas.tsx:
+  - unions real + pending into renderedNodes/Edges
+  - pending edges get dashed cyan stroke
+  - pending nodes render ghosted (60% opacity + dashed border) via BlockNode
+  - banner at top: "✦ Copilot suggested N blocks · [Apply] [Reject]"
+
+Apply → canvasStore.applyStaged():
+  - merges pending into nodes/edges (dedupe by id)
+  - strips pending=true flags
+  - clears pending* state
+Reject → canvasStore.rejectStaged():
+  - clears pending* state only
+```
+
+### RAG ingestion
+```
+scripts/ingest_corpus.py --path backend/corpus/pdfs
+  → pdfplumber.extract_text per page
+  → chunk_text (paragraph-aware, 500-word target, 75-word overlap)
+  → embed_document (Gemini text-embedding-004, task_type=RETRIEVAL_DOCUMENT, batch size 100)
+  → insert into knowledge_chunks with metadata
+    { source_filename, page_number, chunk_index, word_count, source_type }
+```
+
+Idempotent by filename. Use `--force` to reingest.
+
+### Supabase objects added
+- `knowledge_chunks.metadata jsonb` + GIN index
+- `knowledge_chunks_source_idx`, `knowledge_chunks_created_idx`
+- `match_doc_chunks(query_embedding, match_threshold, match_count, filter_source_type?, filter_ticker?, filter_recency_days?)` SECURITY DEFINER function, granted to `authenticated`
+- `copilot_messages.session_id`, `attachments`, `created_at` columns
+- Role check loosened to include `assistant`
+
+### Env additions (`.env.local`)
+```
+GOOGLE_API_KEY=<Gemini key>
+GEMINI_MODEL=gemini-2.0-flash
+GEMINI_EMBEDDING_MODEL=text-embedding-004
+```
+
+### Files added
+```
+backend/agent/__init__.py
+backend/agent/embeddings.py
+backend/agent/ingestion.py
+backend/agent/retrieval.py
+backend/agent/prompts.py
+backend/agent/tools.py
+backend/agent/orchestrator.py
+backend/api/agent.py
+scripts/ingest_corpus.py
+scripts/test_retrieval.py
+supabase/migrations/20260419_1000_add_match_doc_chunks_rpc.sql
+supabase/migrations/20260419_1001_copilot_messages_columns.sql
+backend/corpus/README.md
+lib/api/copilot.ts
+lib/canvas/serialize.ts
+```
+
+### Files touched (additive only)
+- `backend/main.py` — register `agent` router
+- `backend/core/config.py` — `google_api_key`, `gemini_model`, `gemini_embedding_model`
+- `backend/requirements.txt` — `google-generativeai`, `pdfplumber`
+- `types/index.ts` — `PipelineTemplate`, `pipeline_template` CopilotEvent, `NodeData.pending`
+- `stores/canvasStore.ts` — `pendingNodes`, `pendingEdges`, `stagePipelineTemplate`, `applyStaged`, `rejectStaged`
+- `components/canvas/nodes/BlockNode.tsx` — dashed cyan border + 60% opacity when `data.pending`
+- `components/canvas/Canvas.tsx` — unions pending with real, renders banner + dashed edges
+- `lib/api/placeholders.ts` — re-exports `streamCopilotChat` from `lib/api/copilot.ts`
+- `hooks/useCopilot.ts` — `session_id` management, `canvas_state` serialization, `pipeline_template` handler

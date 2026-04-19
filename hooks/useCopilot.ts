@@ -1,12 +1,16 @@
 'use client'
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { streamCopilotChat } from '@/lib/api/placeholders'
+import { useCanvasStore } from '@/stores/canvasStore'
+import { serializeCanvas } from '@/lib/canvas/serialize'
 import type {
   Message,
   CopilotMode,
   Attachment,
   PageContext,
   PipelineGraph,
+  PipelineTemplate,
+  Citation,
 } from '@/types'
 
 interface UseCopilotOptions {
@@ -24,6 +28,24 @@ export function useCopilot({
   const [isStreaming, setIsStreaming] = useState(false)
   const [mode, setMode] = useState<CopilotMode>('ask')
   const [attachments, setAttachments] = useState<Attachment[]>([])
+  const sessionIdRef = useRef<string>('')
+
+  // Stable session_id per (user, project). Scoped to the browser via localStorage.
+  useEffect(() => {
+    try {
+      const key = `ezq_chat_session:${pageContext.projectId ?? 'global'}`
+      const existing = localStorage.getItem(key)
+      if (existing) {
+        sessionIdRef.current = existing
+      } else {
+        const fresh = crypto.randomUUID()
+        localStorage.setItem(key, fresh)
+        sessionIdRef.current = fresh
+      }
+    } catch {
+      sessionIdRef.current = crypto.randomUUID()
+    }
+  }, [pageContext.projectId])
 
   const addAttachment = useCallback(
     (a: Attachment) => setAttachments((p) => [...p, a]),
@@ -66,8 +88,25 @@ export function useCopilot({
         },
       ])
 
+      // Serialize current canvas state so the agent has context.
+      const store = useCanvasStore.getState()
+      const canvasState = serializeCanvas(store.nodes, store.edges, {
+        selectedNodeId: store.selectedNodeId,
+        lastRunResults: store.lastRunResults,
+      })
+
       try {
-        for await (const event of streamCopilotChat(text, pageContext, sentAttachments)) {
+        for await (const event of streamCopilotChat(
+          text,
+          pageContext,
+          sentAttachments,
+          {
+            sessionId: sessionIdRef.current || 'default',
+            projectId: pageContext.projectId ?? null,
+            canvasState,
+            mode,
+          }
+        )) {
           switch (event.type) {
             case 'text':
               setMessages((p) =>
@@ -76,21 +115,40 @@ export function useCopilot({
                 )
               )
               break
-            case 'tool_use':
+            case 'tool_use': {
+              const status = event.status ?? 'running'
               setMessages((p) =>
-                p.map((m) =>
-                  m.id === agentId
-                    ? {
-                        ...m,
-                        toolCalls: [
-                          ...(m.toolCalls ?? []),
-                          { tool: event.tool, summary: event.summary, status: 'running' as const },
-                        ],
-                      }
-                    : m
-                )
+                p.map((m) => {
+                  if (m.id !== agentId) return m
+                  const existing = (m.toolCalls ?? []).find(
+                    (tc) => tc.tool === event.tool && tc.status !== 'done'
+                  )
+                  if (existing && status === 'done') {
+                    return {
+                      ...m,
+                      toolCalls: (m.toolCalls ?? []).map((tc) =>
+                        tc === existing
+                          ? { ...tc, summary: event.summary, status: 'done' as const }
+                          : tc
+                      ),
+                    }
+                  }
+                  if (existing) return m
+                  return {
+                    ...m,
+                    toolCalls: [
+                      ...(m.toolCalls ?? []),
+                      {
+                        tool: event.tool,
+                        summary: event.summary,
+                        status: status as 'running' | 'done',
+                      },
+                    ],
+                  }
+                })
               )
               break
+            }
             case 'tool_result':
               setMessages((p) =>
                 p.map((m) =>
@@ -107,19 +165,36 @@ export function useCopilot({
                 )
               )
               break
-            case 'citations':
+            case 'citations': {
+              const list: Citation[] =
+                (event.sources as Citation[] | undefined) ??
+                (event.citations as Citation[] | undefined) ??
+                []
               setMessages((p) =>
-                p.map((m) => (m.id === agentId ? { ...m, citations: event.citations } : m))
+                p.map((m) => (m.id === agentId ? { ...m, citations: list } : m))
               )
               break
+            }
             case 'applied_banner':
               setMessages((p) =>
                 p.map((m) => (m.id === agentId ? { ...m, appliedTemplate: true } : m))
               )
               break
             case 'suggest_pipeline_template':
+              // Legacy mock path — forwards the raw graph to the canvas callback.
               onPipelineGenerated?.(event.graph)
               break
+            case 'pipeline_template': {
+              // Agent path — stage as ghosted, awaiting user approval.
+              const tpl: PipelineTemplate = event.template
+              useCanvasStore.getState().stagePipelineTemplate(tpl)
+              setMessages((p) =>
+                p.map((m) =>
+                  m.id === agentId ? { ...m, appliedTemplate: true } : m
+                )
+              )
+              break
+            }
             case 'done':
               break
           }
@@ -134,7 +209,7 @@ export function useCopilot({
         setIsStreaming(false)
       }
     },
-    [isStreaming, attachments, pageContext, onPipelineGenerated]
+    [isStreaming, attachments, pageContext, onPipelineGenerated, mode]
   )
 
   return {

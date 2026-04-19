@@ -82,11 +82,25 @@ export function CopilotPanel({
     }
   }
 
+  const autosize = (el: HTMLTextAreaElement | null) => {
+    if (!el) return
+    el.style.height = 'auto'
+    const max = 160
+    el.style.height = Math.min(el.scrollHeight, max) + 'px'
+    el.style.overflowY = el.scrollHeight > max ? 'auto' : 'hidden'
+  }
+
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const v = e.target.value
     setDraft(v)
     setShowSlash(v === '/')
+    autosize(e.currentTarget)
   }
+
+  // Keep height in sync when `draft` is cleared after send / cleared externally.
+  useEffect(() => {
+    autosize(textareaRef.current)
+  }, [draft])
 
   const handleFileAttach = (type: 'image' | 'pdf') => {
     const input = document.createElement('input')
@@ -228,7 +242,8 @@ export function CopilotPanel({
                 placeholder="Ask anything, or /template /ask /debug"
                 rows={1}
                 data-composer="true"
-                className="w-full bg-transparent border-none text-[11px] text-eq-t1 placeholder:text-eq-t3 font-sans outline-none resize-none leading-relaxed"
+                wrap="soft"
+                className="w-full bg-transparent border-none text-[11px] text-eq-t1 placeholder:text-eq-t3 font-sans outline-none resize-none leading-relaxed break-words whitespace-pre-wrap overflow-y-hidden max-h-40 block"
               />
               <div className="flex items-center gap-1">
                 <button

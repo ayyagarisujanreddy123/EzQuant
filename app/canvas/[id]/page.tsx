@@ -10,7 +10,6 @@ import { CopilotPanel } from '@/components/copilot/CopilotPanel'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { fetchProject, saveProject } from '@/lib/api/placeholders'
 import { runPipeline } from '@/lib/api/pipeline'
-import { MOCK_CANVAS_MESSAGES } from '@/lib/mocks/mockMessages'
 import type { PageContext, PipelineGraph, BlockStatus } from '@/types'
 import { Play, ChevronLeft, Loader2, Check } from 'lucide-react'
 
@@ -34,6 +33,8 @@ export default function CanvasPage() {
     setRunId,
   } = useCanvasStore()
   const [projectName, setProjectName] = useState('Untitled')
+  const [isEditingName, setIsEditingName] = useState(false)
+  const [nameDraft, setNameDraft] = useState('')
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [runError, setRunError] = useState<string | null>(null)
 
@@ -127,7 +128,47 @@ export default function CanvasPage() {
     <AppShell>
       <div className="h-full flex flex-col overflow-hidden">
         <div className="flex items-center gap-2 px-3 h-11 bg-bg-1 border-b border-eq-border flex-shrink-0 text-[12px]">
-          <span className="font-medium text-eq-t1">{projectName}</span>
+          {isEditingName ? (
+            <input
+              type="text"
+              autoFocus
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const next = nameDraft.trim() || projectName
+                  setProjectName(next)
+                  setIsEditingName(false)
+                  if (next !== projectName) {
+                    saveProject({ id, name: next, graph: { nodes, edges } }).catch(() => {})
+                  }
+                } else if (e.key === 'Escape') {
+                  setIsEditingName(false)
+                }
+              }}
+              onBlur={() => {
+                const next = nameDraft.trim() || projectName
+                setProjectName(next)
+                setIsEditingName(false)
+                if (next !== projectName) {
+                  saveProject({ id, name: next, graph: { nodes, edges } }).catch(() => {})
+                }
+              }}
+              className="bg-bg-3 border border-eq-accent/50 text-eq-t1 text-[12px] font-medium px-2 py-0.5 rounded outline-none min-w-[140px]"
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setNameDraft(projectName)
+                setIsEditingName(true)
+              }}
+              title="Rename project"
+              className="font-medium text-eq-t1 hover:text-eq-accent px-1 py-0.5 -ml-1 rounded hover:bg-bg-3 transition-colors"
+            >
+              {projectName}
+            </button>
+          )}
           <span className="text-eq-t3">/</span>
           <span className="text-[11px] text-eq-t3">
             {nodes.length} blocks{isCopilotSuggested ? ' · gemini-suggested' : ''} ·{' '}
@@ -188,9 +229,9 @@ export default function CanvasPage() {
           <Inspector />
           <CopilotPanel
             pageContext={ctx}
-            initialMessages={MOCK_CANVAS_MESSAGES}
+
             onPipelineGenerated={handlePipelineGenerated}
-            subtitle="gemini-2.0-flash · agent"
+            subtitle="gemini-2.5-flash · agent"
           />
         </div>
 

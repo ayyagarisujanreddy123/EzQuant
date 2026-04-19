@@ -12,17 +12,22 @@ const STATUS_DOT: Record<string, string> = {
 
 export function BlockNode({ data, selected }: NodeProps<CanvasNode>) {
   const isCopilot = data.source === 'copilot'
+  const isPending = data.pending === true
   const firstParamEntry = Object.entries(data.params)[0]
   const paramPreview = firstParamEntry ? `${firstParamEntry[0]}: ${firstParamEntry[1]}` : ''
 
+  const borderClass = isPending
+    ? 'border-eq-cyan border-dashed shadow-[0_0_0_2px_rgba(34,211,238,0.12)]'
+    : selected
+    ? 'border-eq-accent shadow-[0_0_0_2px_rgba(139,125,255,0.14)]'
+    : isCopilot
+    ? 'border-eq-cyan shadow-[0_0_0_2px_rgba(34,211,238,0.12)]'
+    : 'border-eq-border-2 hover:border-white/25'
+
   return (
     <div
-      className={`w-[130px] bg-bg-2 border rounded-[7px] text-[10px] cursor-pointer transition-all ${
-        selected
-          ? 'border-eq-accent shadow-[0_0_0_2px_rgba(139,125,255,0.14)]'
-          : isCopilot
-          ? 'border-eq-cyan shadow-[0_0_0_2px_rgba(34,211,238,0.12)]'
-          : 'border-eq-border-2 hover:border-white/25'
+      className={`w-[130px] bg-bg-2 border rounded-[7px] text-[10px] cursor-pointer transition-all ${borderClass} ${
+        isPending ? 'opacity-60' : ''
       }`}
     >
       <Handle

@@ -3,11 +3,10 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { AppShell } from '@/components/layout/AppShell'
 import { CopilotPanel } from '@/components/copilot/CopilotPanel'
-import { fetchProjects, createProject } from '@/lib/api/placeholders'
+import { fetchProjects, createProject, deleteProject } from '@/lib/api/placeholders'
 import { MOCK_TEMPLATES } from '@/lib/mocks/mockTemplates'
-import { MOCK_PROJECTS_MESSAGES } from '@/lib/mocks/mockMessages'
 import type { Project, PageContext, Template } from '@/types'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Trash2 } from 'lucide-react'
 
 const ACCENT_BAR: Record<string, string> = {
   green: 'bg-eq-green',
@@ -25,6 +24,7 @@ export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchProjects()
@@ -32,6 +32,21 @@ export default function ProjectsPage() {
       .catch(() => setProjects([]))
       .finally(() => setLoading(false))
   }, [])
+
+  const handleDelete = async (proj: Project, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!confirm(`Delete "${proj.name}"? This cannot be undone.`)) return
+    setDeletingId(proj.id)
+    try {
+      await deleteProject(proj.id)
+      setProjects((prev) => prev.filter((p) => p.id !== proj.id))
+    } catch (err) {
+      console.error(err)
+      alert('Delete failed: ' + (err instanceof Error ? err.message : String(err)))
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   const handleNewPipeline = async (input?: { name?: string; template?: Template }) => {
     setCreating(true)
@@ -107,12 +122,25 @@ export default function ProjectsPage() {
               <div
                 key={proj.id}
                 onClick={() => router.push(`/canvas/${proj.id}`)}
-                className="bg-bg-2 border border-eq-border rounded-[10px] p-3.5 cursor-pointer hover:border-eq-accent transition-all"
+                className="group relative bg-bg-2 border border-eq-border rounded-[10px] p-3.5 cursor-pointer hover:border-eq-accent transition-all"
               >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[12px] font-medium text-eq-t1">{proj.name}</span>
+                <button
+                  type="button"
+                  onClick={(e) => handleDelete(proj, e)}
+                  disabled={deletingId === proj.id}
+                  title="Delete project"
+                  className="absolute top-2 right-2 w-6 h-6 rounded flex items-center justify-center text-eq-t3 hover:text-eq-red hover:bg-eq-red-dim opacity-0 group-hover:opacity-100 focus:opacity-100 disabled:opacity-50 transition-opacity"
+                >
+                  {deletingId === proj.id ? (
+                    <Loader2 size={12} className="animate-spin" />
+                  ) : (
+                    <Trash2 size={12} />
+                  )}
+                </button>
+                <div className="flex items-center justify-between mb-1 pr-6">
+                  <span className="text-[12px] font-medium text-eq-t1 truncate">{proj.name}</span>
                   <div
-                    className={`w-1.5 h-1.5 rounded-full ${
+                    className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
                       proj.status === 'healthy' ? 'bg-eq-green' : 'bg-eq-amber'
                     }`}
                   />
@@ -138,8 +166,8 @@ export default function ProjectsPage() {
 
         <CopilotPanel
           pageContext={ctx}
-          initialMessages={MOCK_PROJECTS_MESSAGES}
-          subtitle="gemini-2.0-flash · rag"
+
+          subtitle="gemini-2.5-flash · rag"
         />
       </div>
     </AppShell>

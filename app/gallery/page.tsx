@@ -3,7 +3,6 @@ import { useRouter } from 'next/navigation'
 import { AppShell } from '@/components/layout/AppShell'
 import { CopilotPanel } from '@/components/copilot/CopilotPanel'
 import { MOCK_TEMPLATES } from '@/lib/mocks/mockTemplates'
-import { MOCK_GALLERY_MESSAGES } from '@/lib/mocks/mockMessages'
 import type { PageContext } from '@/types'
 
 interface MiniNode {
@@ -112,8 +111,8 @@ export default function GalleryPage() {
         </div>
         <CopilotPanel
           pageContext={ctx}
-          initialMessages={MOCK_GALLERY_MESSAGES}
-          subtitle="gemini-2.0-flash · multimodal"
+
+          subtitle="gemini-2.5-flash · rag"
         />
       </div>
     </AppShell>
