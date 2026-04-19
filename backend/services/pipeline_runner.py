@@ -44,6 +44,10 @@ PREVIEW_MAX_ROWS = 3000
 PREVIEW_MAX_COLS = 10
 
 SOURCE_BLOCKS = {"universe", "csv_upload"}
+
+# Blocks that aggregate across tickers instead of forking per-ticker. In
+# multi-ticker runs the runner calls these exactly once with a panel input.
+CROSS_SECTIONAL_BLOCKS = {"signal_diagnostics"}
 STRETCH_BLOCKS = {
     "drop_na",
     "resample",
@@ -96,54 +100,221 @@ def execute_pipeline(
             )
 
     # 4. Walk in order; propagate DataFrames; catch per-block errors.
-    dfs: Dict[str, pd.DataFrame] = {}
-    outputs: Dict[str, dict] = {}             # raw block returns
-    statuses: Dict[str, str] = {nid: "idle" for nid in order}
-    errors: Dict[str, str] = {}
+    # We track results per "ticker" key. Single-ticker pipelines have exactly
+    # one key. When a Universe block returns metadata.per_ticker (multi-ticker
+    # request), the downstream nodes are executed once per ticker and the
+    # results are aggregated.
+    dfs_by_ticker: Dict[str, Dict[str, pd.DataFrame]] = {}
+    outputs_by_ticker: Dict[str, Dict[str, dict]] = {}
+    statuses_by_ticker: Dict[str, Dict[str, str]] = {}
+    errors_by_ticker: Dict[str, Dict[str, str]] = {}
+    tickers: List[str] = []
 
     for nid in order:
         node = nodes_by_id[nid]
         bt = node.data.blockType
 
-        # If any ancestor failed → skip.
-        upstream_ids = [e.source for e in incoming.get(nid, [])]
-        failed_ancestor = next((u for u in upstream_ids if statuses.get(u) in {"error", "skipped"}), None)
-        if failed_ancestor:
-            statuses[nid] = "skipped"
-            errors[nid] = f"Skipped (upstream {failed_ancestor} failed)"
+        # ── Case A: source blocks (universe/csv_upload) run once ────────────
+        if bt in SOURCE_BLOCKS:
+            ok, out, err = _execute_block(bt, node, [], {})
+            if not ok:
+                tickers = tickers or [node.id]   # fall back to node-id as key
+                for t in tickers:
+                    statuses_by_ticker.setdefault(t, {})[nid] = "error"
+                    errors_by_ticker.setdefault(t, {})[nid] = err
+                continue
+
+            md = out.get("metadata") or {}
+            per_ticker_map = md.get("per_ticker") if isinstance(md, dict) else None
+            if per_ticker_map:
+                tickers = list(per_ticker_map.keys())
+                for t in tickers:
+                    dfs_by_ticker.setdefault(t, {})[nid] = per_ticker_map[t]
+                    # Store a per-ticker output shaped like the primary so
+                    # _result_for_node can build a NodeResult.
+                    per_out = dict(out)
+                    per_out["df"] = per_ticker_map[t]
+                    per_md = dict(md)
+                    # Drop the heavy per_ticker map from per-ticker metadata.
+                    per_md.pop("per_ticker", None)
+                    per_md["symbol"] = t
+                    per_out["metadata"] = per_md
+                    outputs_by_ticker.setdefault(t, {})[nid] = per_out
+                    statuses_by_ticker.setdefault(t, {})[nid] = "success"
+            else:
+                primary_ticker = (
+                    (md.get("symbol") if isinstance(md, dict) else None)
+                    or (md.get("tickers", ["_"])[0] if isinstance(md, dict) and md.get("tickers") else "_")
+                )
+                if not tickers:
+                    tickers = [primary_ticker]
+                dfs_by_ticker.setdefault(primary_ticker, {})[nid] = out["df"]
+                outputs_by_ticker.setdefault(primary_ticker, {})[nid] = out
+                statuses_by_ticker.setdefault(primary_ticker, {})[nid] = "success"
             continue
 
-        statuses[nid] = "running"
-        try:
-            inputs = _build_inputs(node, incoming.get(nid, []), dfs)
-            out = BLOCK_REGISTRY[bt](inputs, dict(node.data.params))
-            if "df" not in out or out["df"] is None:
-                raise ValueError("Block returned no 'df'.")
-            dfs[nid] = out["df"]
-            outputs[nid] = out
-            statuses[nid] = "success"
-        except Exception as e:
-            logger.warning("Block %s (%s) failed: %s", nid, bt, e)
+        # ── Case B: cross-sectional blocks (signal_diagnostics) ─────────────
+        if bt in CROSS_SECTIONAL_BLOCKS:
+            if len(tickers) < 2:
+                # User's rule: single-ticker → clear error, not a silent
+                # degradation. signal_diagnostics is only useful cross-section.
+                msg = (
+                    "signal_diagnostics needs ≥ 2 tickers. Edit your Universe "
+                    "block and list them comma-separated (e.g. NVDA, AAPL, SPY)."
+                )
+                key = tickers[0] if tickers else "_"
+                statuses_by_ticker.setdefault(key, {})[nid] = "error"
+                errors_by_ticker.setdefault(key, {})[nid] = msg
+                continue
+
+            # Walk edges once to collect upstream dfs per ticker.
+            up_edges = incoming.get(nid, [])
+            panel_signal: Dict[str, pd.DataFrame] = {}
+            panel_fr: Dict[str, pd.DataFrame] = {}
+            upstream_failed = False
+            for t in tickers:
+                # Any upstream failure for this ticker → skip the whole block.
+                if any(
+                    statuses_by_ticker.get(t, {}).get(e.source) in {"error", "skipped"}
+                    for e in up_edges
+                ):
+                    upstream_failed = True
+                    break
+                # For MVP (single-branch linear pipeline) the same df feeds
+                # both signal_df and forward_return_df.
+                up_df = None
+                for e in up_edges:
+                    if e.source in dfs_by_ticker.get(t, {}):
+                        up_df = dfs_by_ticker[t][e.source]
+                        break
+                if up_df is None:
+                    upstream_failed = True
+                    break
+                panel_signal[t] = up_df
+                panel_fr[t] = up_df
+
+            if upstream_failed or len(panel_signal) < 2:
+                for t in tickers:
+                    statuses_by_ticker.setdefault(t, {})[nid] = "skipped"
+                    errors_by_ticker.setdefault(t, {})[nid] = (
+                        "skipped (upstream failed or <2 tickers reached this node)"
+                    )
+                continue
+
+            panel_inputs = {
+                "panel_signal_df": panel_signal,
+                "panel_forward_return_df": panel_fr,
+            }
+            try:
+                out = BLOCK_REGISTRY[bt](panel_inputs, dict(node.data.params))
+                if "df" not in out or out["df"] is None:
+                    raise ValueError("Block returned no 'df'.")
+                # Store the output on EVERY ticker's dfs so any downstream
+                # block (none today) can consume it. The NodeResult
+                # assembler reads from the primary ticker.
+                primary_t = tickers[0]
+                dfs_by_ticker.setdefault(primary_t, {})[nid] = out["df"]
+                outputs_by_ticker.setdefault(primary_t, {})[nid] = out
+                for t in tickers:
+                    statuses_by_ticker.setdefault(t, {})[nid] = "success"
+            except Exception as e:
+                logger.warning("signal_diagnostics panel run failed: %s", e)
+                logger.debug("%s", traceback.format_exc())
+                for t in tickers:
+                    statuses_by_ticker.setdefault(t, {})[nid] = "error"
+                    errors_by_ticker.setdefault(t, {})[nid] = f"{type(e).__name__}: {e}"
+            continue
+
+        # ── Case C: per-ticker fork (default downstream blocks) ─────────────
+        if not tickers:
+            # No upstream source emitted any ticker. Treat the node as errored.
+            errors_by_ticker.setdefault("_", {})[nid] = "no upstream data"
+            statuses_by_ticker.setdefault("_", {})[nid] = "error"
+            continue
+
+        for t in tickers:
+            st_map = statuses_by_ticker.setdefault(t, {})
+            er_map = errors_by_ticker.setdefault(t, {})
+
+            upstream_ids = [e.source for e in incoming.get(nid, [])]
+            failed_ancestor = next(
+                (u for u in upstream_ids if st_map.get(u) in {"error", "skipped"}),
+                None,
+            )
+            if failed_ancestor:
+                st_map[nid] = "skipped"
+                er_map[nid] = f"Skipped (upstream {failed_ancestor} failed)"
+                continue
+
+            st_map[nid] = "running"
+            ok, out, err = _execute_block(
+                bt, node, incoming.get(nid, []), dfs_by_ticker.get(t, {}),
+            )
+            if ok:
+                dfs_by_ticker.setdefault(t, {})[nid] = out["df"]
+                outputs_by_ticker.setdefault(t, {})[nid] = out
+                st_map[nid] = "success"
+            else:
+                st_map[nid] = "error"
+                er_map[nid] = err
+
+    # Aggregate into the flat view the rest of the function expects.
+    statuses: Dict[str, str] = {}
+    errors: Dict[str, str] = {}
+    for nid in order:
+        per_node_statuses = [statuses_by_ticker.get(t, {}).get(nid, "idle") for t in (tickers or ["_"])]
+        if any(s == "error" for s in per_node_statuses):
             statuses[nid] = "error"
-            errors[nid] = f"{type(e).__name__}: {e}"
-            logger.debug("%s", traceback.format_exc())
+        elif all(s == "success" for s in per_node_statuses):
+            statuses[nid] = "success"
+        elif any(s == "skipped" for s in per_node_statuses):
+            statuses[nid] = "skipped"
+        else:
+            statuses[nid] = per_node_statuses[0] if per_node_statuses else "idle"
+        node_errs = [errors_by_ticker.get(t, {}).get(nid) for t in (tickers or ["_"])]
+        first_err = next((e for e in node_errs if e), None)
+        if first_err:
+            errors[nid] = first_err
+
+    # Primary ticker (first) drives top-level NodeResult fields; the rest
+    # populate per_ticker.
+    primary_ticker = tickers[0] if tickers else "_"
+    dfs = dfs_by_ticker.get(primary_ticker, {})
+    outputs = outputs_by_ticker.get(primary_ticker, {})
 
     # 5. Assemble per-node results.
     node_results: Dict[str, NodeResult] = {}
     for nid in order:
-        node_results[nid] = _result_for_node(
+        nr = _result_for_node(
             node=nodes_by_id[nid],
             status=statuses[nid],
             df=dfs.get(nid),
             raw_out=outputs.get(nid),
             error=errors.get(nid),
         )
+        # Cross-sectional nodes have a single shared result — no per-ticker split.
+        bt_here = nodes_by_id[nid].data.blockType
+        if len(tickers) > 1 and bt_here not in CROSS_SECTIONAL_BLOCKS:
+            per_ticker_results: Dict[str, NodeResult] = {}
+            for t in tickers:
+                per_ticker_results[t] = _result_for_node(
+                    node=nodes_by_id[nid],
+                    status=statuses_by_ticker.get(t, {}).get(nid, statuses[nid]),
+                    df=dfs_by_ticker.get(t, {}).get(nid),
+                    raw_out=outputs_by_ticker.get(t, {}).get(nid),
+                    error=errors_by_ticker.get(t, {}).get(nid),
+                )
+            nr.per_ticker = per_ticker_results
+        node_results[nid] = nr
 
     overall_status = (
         "error" if any(s == "error" for s in statuses.values())
         else "success"
     )
     summary = _build_summary(order, outputs)
+    if len(tickers) > 1:
+        summary = dict(summary or {})
+        summary["tickers"] = tickers
 
     return RunResponse(
         run_id=None,                          # caller fills in when persisting
@@ -158,6 +329,25 @@ def execute_pipeline(
 
 
 # ─── Topological sort + input wiring ─────────────────────────────────────────
+
+
+def _execute_block(
+    bt: str,
+    node,
+    in_edges,
+    dfs: Dict[str, pd.DataFrame],
+) -> Tuple[bool, dict, str]:
+    """Run one block. Returns (ok, output_dict_or_empty, error_str_or_empty)."""
+    try:
+        inputs = _build_inputs(node, in_edges, dfs)
+        out = BLOCK_REGISTRY[bt](inputs, dict(node.data.params))
+        if "df" not in out or out["df"] is None:
+            raise ValueError("Block returned no 'df'.")
+        return True, out, ""
+    except Exception as e:
+        logger.warning("Block %s (%s) failed: %s", node.id, bt, e)
+        logger.debug("%s", traceback.format_exc())
+        return False, {}, f"{type(e).__name__}: {e}"
 
 
 def _topo_sort(p: Pipeline) -> Tuple[List[str], Dict[str, list]]:

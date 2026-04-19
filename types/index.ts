@@ -67,9 +67,12 @@ export interface Diagnostics {
   ic: number
   ic_tstat: number
   n: number
+  n_tickers?: number                         // how many assets went into CS-IC
+  ic_std?: number                            // std of IC_t across time
   ic_decay: Record<string, number>           // {"1": 0.05, "5": 0.02, ...}
   ic_stability: Record<string, number>       // {"2023-01": 0.08, ...}
-  signal_autocorr: number
+  signal_autocorr: number                    // period-over-period rank autocorr
+  warnings?: string[]
 }
 
 /** Per-node result the backend ships back for Inspector to render. */
@@ -83,6 +86,8 @@ export interface NodeRunResult {
   metrics?: Metrics
   diagnostics?: Diagnostics
   metadata?: Record<string, unknown>
+  /** Multi-ticker sub-results keyed by ticker symbol. Top-level fields are the primary (first) ticker's view. */
+  per_ticker?: Record<string, NodeRunResult>
 }
 
 export interface RunResponse {

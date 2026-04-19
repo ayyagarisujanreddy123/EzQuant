@@ -162,6 +162,7 @@ const INSPECTOR_DEFAULT = 260
 export function Inspector() {
   const [tab, setTab] = useState<Tab>('data')
   const [width, setWidth] = useState<number>(INSPECTOR_DEFAULT)
+  const [selectedTicker, setSelectedTicker] = useState<string | null>(null)
   const { nodes, edges, selectedNodeId, updateParam, applyRunResults, setStatuses, isRunning, setIsRunning } =
     useCanvasStore()
   const node = nodes.find((n) => n.id === selectedNodeId)
@@ -172,6 +173,30 @@ export function Inspector() {
   useEffect(() => {
     if (selectedNodeId) setTab('params')
   }, [selectedNodeId])
+
+  // Multi-ticker view: pick which ticker's sub-result to render.
+  const tickers = useMemo<string[]>(() => {
+    const pt = node?.data.lastResult?.per_ticker
+    return pt ? Object.keys(pt) : []
+  }, [node])
+
+  useEffect(() => {
+    if (tickers.length === 0) {
+      if (selectedTicker !== null) setSelectedTicker(null)
+      return
+    }
+    if (!selectedTicker || !tickers.includes(selectedTicker)) {
+      setSelectedTicker(tickers[0])
+    }
+  }, [tickers, selectedTicker])
+
+  const activeResult = useMemo(() => {
+    if (!node?.data.lastResult) return null
+    if (selectedTicker && node.data.lastResult.per_ticker?.[selectedTicker]) {
+      return node.data.lastResult.per_ticker[selectedTicker]
+    }
+    return node.data.lastResult
+  }, [node, selectedTicker])
 
   const onResizeStart = useCallback((e: React.PointerEvent) => {
     e.preventDefault()
@@ -257,13 +282,31 @@ export function Inspector() {
         ))}
       </div>
 
+      {node && tickers.length > 1 && (
+        tab === 'data' ||
+        (tab === 'eval' && node.data.blockType !== 'signal_diagnostics')
+      ) && (
+        <div className="flex items-center gap-1.5 px-2.5 py-1.5 border-b border-eq-border bg-bg-2">
+          <span className="text-[9px] text-eq-t3 uppercase tracking-wider">Ticker</span>
+          <select
+            value={selectedTicker ?? tickers[0]}
+            onChange={(e) => setSelectedTicker(e.target.value)}
+            className="flex-1 bg-bg-3 border border-eq-border text-eq-t1 text-[10px] rounded px-1.5 py-1 font-mono outline-none"
+          >
+            {tickers.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
       <div className="p-2.5">
         {!node ? (
           <p className="text-[10px] text-eq-t3 text-center mt-4">
             Select a node to inspect
           </p>
         ) : tab === 'data' ? (
-          <DataTab node={node} />
+          <DataTab node={node} view={activeResult ?? undefined} />
         ) : tab === 'params' ? (
           <ParamsTab
             node={node}
@@ -272,7 +315,7 @@ export function Inspector() {
             isRunning={isRunning}
           />
         ) : (
-          <EvalTab node={node} />
+          <EvalTab node={node} view={activeResult ?? undefined} />
         )}
       </div>
     </div>
@@ -281,10 +324,12 @@ export function Inspector() {
 
 // ─── Data tab ────────────────────────────────────────────────────────────────
 
-function DataTab({ node }: { node: CanvasNode }) {
-  const q = node.data.quality
-  const err = node.data.fetchError
-  const preview = node.data.lastResult?.df_preview
+function DataTab({ node, view }: { node: CanvasNode; view?: import('@/types').NodeRunResult }) {
+  // When a multi-ticker run populated per_ticker, `view` is the selected
+  // ticker's sub-result. Otherwise fall back to the node's primary data.
+  const q = view?.quality ?? node.data.quality
+  const err = view?.error ?? node.data.fetchError
+  const preview = view?.df_preview ?? node.data.lastResult?.df_preview
   const isRunning = node.data.status === 'running'
 
   // Numeric columns in preview (skip date/index) — candidates for the chart.
@@ -562,15 +607,18 @@ function ParamsTab({
 
 // ─── Eval tab ────────────────────────────────────────────────────────────────
 
-function EvalTab({ node }: { node: CanvasNode }) {
+function EvalTab({ node, view }: { node: CanvasNode; view?: import('@/types').NodeRunResult }) {
   const bt = node.data.blockType
-  if (bt === 'signal_diagnostics' && node.data.diagnostics) {
-    return <DiagnosticsCards d={node.data.diagnostics} />
+  const diagnostics = (view?.diagnostics as import('@/types').Diagnostics | undefined) ?? node.data.diagnostics
+  const metrics = (view?.metrics as import('@/types').Metrics | undefined) ?? node.data.metrics
+  const preview = view?.df_preview ?? node.data.lastResult?.df_preview
+
+  if (bt === 'signal_diagnostics' && diagnostics) {
+    return <DiagnosticsCards d={diagnostics} />
   }
-  if (bt === 'backtest' && node.data.metrics) {
-    return <BacktestCards m={node.data.metrics} />
+  if (bt === 'backtest' && metrics) {
+    return <BacktestCards m={metrics} />
   }
-  const preview = node.data.lastResult?.df_preview
   if (preview) {
     return <OutputStats preview={preview} blockType={bt} />
   }
@@ -717,14 +765,31 @@ function DiagnosticsCards({ d }: { d: Diagnostics }) {
     <div className="flex flex-col gap-2.5">
       {/* IC value */}
       <div className="bg-bg-2 border border-eq-border rounded p-2">
-        <div className="text-[8px] text-eq-t3 uppercase tracking-wider mb-0.5">IC · n={d.n}</div>
+        <div className="text-[8px] text-eq-t3 uppercase tracking-wider mb-0.5">
+          Cross-sectional IC · T={d.n}
+          {d.n_tickers ? ` · ${d.n_tickers} assets` : ''}
+        </div>
         <div className={`text-[22px] font-light font-mono ${icColor}`}>
           {Number.isFinite(d.ic) ? d.ic.toFixed(3) : '—'}
         </div>
         <div className="text-[9px] text-eq-t3 font-mono">
           t-stat {Number.isFinite(d.ic_tstat) ? d.ic_tstat.toFixed(2) : '—'}
+          {d.ic_std !== undefined && Number.isFinite(d.ic_std)
+            ? ` · σ(IC) ${d.ic_std.toFixed(3)}`
+            : ''}
         </div>
       </div>
+
+      {d.warnings && d.warnings.length > 0 && (
+        <div className="bg-eq-amber-dim border border-eq-amber/25 rounded p-1.5">
+          <div className="text-[9px] text-eq-amber font-mono mb-0.5">Warnings</div>
+          <ul className="text-[9px] text-eq-t2 font-mono list-disc pl-4 space-y-0.5">
+            {d.warnings.slice(0, 3).map((w, i) => (
+              <li key={i}>{w}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* IC Decay bars */}
       {horizons.length > 0 && (
@@ -776,7 +841,12 @@ function DiagnosticsCards({ d }: { d: Diagnostics }) {
 
       {/* Autocorr */}
       <div className="flex items-center justify-between py-1 border-t border-eq-border">
-        <span className="text-[10px] text-eq-t2">Autocorr</span>
+        <span
+          className="text-[10px] text-eq-t2"
+          title="Period-over-period Spearman correlation between the cross-sectional rank vectors. Low = high turnover."
+        >
+          Rank Autocorr
+        </span>
         <span className="text-[10px] font-mono text-eq-t1">
           {Number.isFinite(d.signal_autocorr) ? d.signal_autocorr.toFixed(3) : '—'}
         </span>
