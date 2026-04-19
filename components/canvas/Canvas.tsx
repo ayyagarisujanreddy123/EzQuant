@@ -4,6 +4,8 @@ import {
   ReactFlow,
   Background,
   BackgroundVariant,
+  addEdge,
+  type Connection,
   type NodeTypes,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
@@ -19,7 +21,7 @@ const NODE_TYPES: NodeTypes = Object.fromEntries(
 ) as NodeTypes
 
 export function Canvas() {
-  const { nodes, edges, onNodesChange, onEdgesChange, setSelected, addNodes } =
+  const { nodes, edges, onNodesChange, onEdgesChange, setEdges, setSelected, addNodes } =
     useCanvasStore()
   const isCopilotSuggested = nodes.some((n) => n.data.source === 'copilot')
 
@@ -31,6 +33,25 @@ export function Canvas() {
   )
 
   const onPaneClick = useCallback(() => setSelected(null), [setSelected])
+
+  const onConnect = useCallback(
+    (conn: Connection) => {
+      if (!conn.source || !conn.target) return
+      const next = addEdge(
+        {
+          id: `e-${conn.source}-${conn.target}-${Date.now()}`,
+          source: conn.source,
+          target: conn.target,
+          sourceHandle: conn.sourceHandle ?? undefined,
+          targetHandle: conn.targetHandle ?? undefined,
+          data: {},
+        },
+        edges
+      )
+      setEdges(next)
+    },
+    [edges, setEdges]
+  )
 
   const onDrop = useCallback(
     (e: React.DragEvent<HTMLDivElement>) => {
@@ -90,6 +111,7 @@ export function Canvas() {
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onConnect={onConnect}
         onNodeClick={onNodeClick}
         onPaneClick={onPaneClick}
         nodeTypes={NODE_TYPES}

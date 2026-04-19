@@ -7,16 +7,18 @@ means you don't sprinkle os.getenv() calls across 10 files.
 """
 from functools import lru_cache
 from typing import List
- 
+
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
  
  
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        # Read both — matches Next.js convention. Later files win.
+        env_file=(".env", ".env.local"),
         env_file_encoding="utf-8",
         case_sensitive=False,
-        extra="ignore",  # don't crash on unknown env vars
+        extra="ignore",  # don't crash on unknown env vars (e.g. NEXT_PUBLIC_*)
     )
  
     # --- Server ---
@@ -43,7 +45,12 @@ class Settings(BaseSettings):
     ohlcv_cache_ttl_historical_days: int = 30
 
     # --- Supabase (backend-side, never shipped to browser) ---
-    supabase_url: str = ""
+    # supabase_url falls back to NEXT_PUBLIC_SUPABASE_URL so a single .env.local
+    # entry serves both frontend and backend.
+    supabase_url: str = Field(
+        default="",
+        validation_alias=AliasChoices("SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL"),
+    )
     supabase_service_role_key: str = ""
     supabase_jwt_secret: str = ""
 
