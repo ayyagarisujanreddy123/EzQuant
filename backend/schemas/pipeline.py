@@ -80,6 +80,13 @@ class NodeResult(BaseModel):
     metrics: Optional[Dict[str, Any]] = None # backtest / signal_diagnostics
     diagnostics: Optional[Dict[str, Any]] = None  # signal_diagnostics full set
     metadata: Optional[Dict[str, Any]] = None
+    # Populated when Universe requested multiple tickers — each ticker has its
+    # own sub-result (df_preview, metrics, diagnostics, etc.). Top-level fields
+    # on NodeResult are the primary (first) ticker's view.
+    per_ticker: Optional[Dict[str, "NodeResult"]] = None
+
+
+NodeResult.model_rebuild()
 
 
 class RunResponse(BaseModel):

@@ -1,7 +1,8 @@
 'use client'
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { ChevronDown, ChevronUp } from 'lucide-react'
+import type { CanvasNode, NodeRunResult } from '@/types'
 
 interface ConsoleEntry {
   ts: string
@@ -23,17 +24,144 @@ const LEVEL_CLASS: Record<ConsoleEntry['level'], string> = {
   info: 'text-eq-blue',
 }
 
+// ─── Registry descriptor helpers ─────────────────────────────────────────────
+
+const OHLCV_COLS = ['Open', 'High', 'Low', 'Close', 'Volume']
+
+function abbreviateColumn(col: string): string {
+  if (col === 'log_return') return 'LR'
+  if (col.startsWith('forward_return_')) return `FR${col.replace('forward_return_', '')}`
+  if (col.startsWith('ema_')) return `EMA${col.replace('ema_', '')}`
+  if (col.startsWith('momentum_')) return `MOM${col.replace('momentum_', '')}`
+  if (col === 'signal') return 'SIG'
+  if (col === 'position') return 'POS'
+  if (col === 'position_change') return 'ΔPOS'
+  if (col === 'pnl') return 'PNL'
+  if (col === 'equity') return 'EQ'
+  if (col === 'adj_close') return 'ADJ'
+  if (col === 'ic') return 'IC'
+  if (col === 'n_tickers') return 'N'
+  return col.toUpperCase().slice(0, 5)
+}
+
+function describeColumns(cols: string[]): { abbrev: string; full: string } {
+  // Strip date/index + de-dup, preserve order.
+  const skip = new Set(['index', 'timestamp', 'Date'])
+  const clean = cols.filter((c) => !skip.has(c))
+
+  const ohlcvPresent = OHLCV_COLS.filter((c) => clean.includes(c))
+  const hasOhlcv = ohlcvPresent.length >= 4
+  const rest = hasOhlcv
+    ? clean.filter((c) => !OHLCV_COLS.includes(c))
+    : clean
+
+  const tokens: string[] = []
+  if (hasOhlcv) tokens.push('OHLCV')
+  for (const c of rest) tokens.push(abbreviateColumn(c))
+
+  return {
+    abbrev: tokens.length > 0 ? tokens.join('_') : 'df',
+    full: clean.join(', '),
+  }
+}
+
+function primaryTickerForNode(node: CanvasNode): string | null {
+  const perTicker = node.data.lastResult?.per_ticker
+  if (perTicker) {
+    const keys = Object.keys(perTicker)
+    if (keys.length > 0) return keys[0]
+  }
+  // Universe stores ticker in params.symbol (may be CSV).
+  if (node.data.blockType === 'universe') {
+    const raw = String(node.data.params?.symbol ?? '').split(',')[0].trim().toUpperCase()
+    if (raw) return raw
+  }
+  const meta = node.data.lastResult?.metadata as Record<string, unknown> | undefined
+  if (meta && typeof meta.symbol === 'string') return meta.symbol as string
+  return null
+}
+
+function buildRegistryEntries(nodes: CanvasNode[]): RegistryEntry[] {
+  const out: RegistryEntry[] = []
+  for (const n of nodes) {
+    const result = n.data.lastResult
+    const baseId = n.data.id || n.id
+
+    // Special case: signal_diagnostics is cross-sectional — one entry only.
+    if (n.data.blockType === 'signal_diagnostics') {
+      const cols = result?.df_preview?.columns ?? []
+      const shape = result?.shape
+      out.push({
+        nodeId: baseId,
+        ticker: null,
+        name: `CS-IC_${baseId}${cols.length ? '_' + describeColumns(cols).abbrev : ''}`,
+        shape: shape ? `(${shape[0]}, ${shape[1]})` : null,
+        status: n.data.status,
+        hoverCols: result?.df_preview?.columns.join(', ') ?? '',
+      })
+      continue
+    }
+
+    // Multi-ticker: one row per (node, ticker).
+    const perTicker = result?.per_ticker
+    if (perTicker && Object.keys(perTicker).length > 0) {
+      for (const [ticker, sub] of Object.entries(perTicker) as [string, NodeRunResult][]) {
+        const desc = describeColumns(sub.df_preview?.columns ?? [])
+        const shape = sub.shape
+        out.push({
+          nodeId: baseId,
+          ticker,
+          name: `${ticker}_${desc.abbrev}`,
+          shape: shape ? `(${shape[0]}, ${shape[1]})` : null,
+          status: sub.status ?? n.data.status,
+          hoverCols: desc.full,
+        })
+      }
+      continue
+    }
+
+    // Single-ticker: one row total.
+    const cols = result?.df_preview?.columns ?? []
+    const desc = describeColumns(cols)
+    const ticker = primaryTickerForNode(n)
+    const shape = result?.shape
+    const name = ticker ? `${ticker}_${desc.abbrev}` : `${baseId}_${desc.abbrev}`
+    out.push({
+      nodeId: baseId,
+      ticker,
+      name,
+      shape: shape ? `(${shape[0]}, ${shape[1]})` : null,
+      status: n.data.status,
+      hoverCols: desc.full,
+    })
+  }
+  return out
+}
+
+// ─── Resize constants ───────────────────────────────────────────────────────
+
 const MIN_HEIGHT = 80
 const MAX_HEIGHT = 480
 const HEADER_HEIGHT = 28
 const MIN_SPLIT = 0.15
 const MAX_SPLIT = 0.85
 
+interface RegistryEntry {
+  nodeId: string
+  ticker: string | null
+  name: string
+  shape: string | null
+  status: 'idle' | 'running' | 'success' | 'error' | 'skipped'
+  hoverCols: string
+}
+
 export function BottomDrawer() {
   const [collapsed, setCollapsed] = useState(false)
   const [drawerHeight, setDrawerHeight] = useState(140)
   const [splitRatio, setSplitRatio] = useState(0.5)
   const { nodes } = useCanvasStore()
+
+  const entries = useMemo<RegistryEntry[]>(() => buildRegistryEntries(nodes), [nodes])
 
   const drawerRef = useRef<HTMLDivElement>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -136,17 +264,36 @@ export function BottomDrawer() {
             <div className="text-[10px] font-medium text-eq-t3 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
               <span className="text-eq-blue">▣</span> Registry
             </div>
-            {nodes.map((n) => (
-              <div
-                key={n.id}
-                className="flex items-center gap-2 py-0.5 border-b border-eq-border text-[10px] font-mono"
-              >
-                <span className="text-eq-blue flex-1 truncate">{n.data.id}.df</span>
-                <span className="text-eq-t3 text-[9px]">
-                  {n.data.status === 'success' ? '✓' : 'pending'}
-                </span>
+            {entries.length === 0 ? (
+              <div className="text-[9px] text-eq-t3 italic py-1">
+                (no nodes yet — drop blocks on the canvas)
               </div>
-            ))}
+            ) : (
+              entries.map((e, i) => (
+                <div
+                  key={`${e.nodeId}:${e.ticker ?? ''}:${i}`}
+                  className="flex items-center gap-2 py-0.5 border-b border-eq-border text-[10px] font-mono"
+                  title={e.hoverCols}
+                >
+                  <span
+                    className={`flex-1 truncate ${
+                      e.status === 'success'
+                        ? 'text-eq-blue'
+                        : e.status === 'error'
+                        ? 'text-eq-red'
+                        : e.status === 'running'
+                        ? 'text-eq-cyan'
+                        : 'text-eq-t3'
+                    }`}
+                  >
+                    {e.name}
+                  </span>
+                  <span className="text-eq-t3 text-[9px] flex-shrink-0">
+                    {e.shape ?? (e.status === 'success' ? '—' : 'pending')}
+                  </span>
+                </div>
+              ))
+            )}
           </div>
 
           {/* Horizontal resize handle */}

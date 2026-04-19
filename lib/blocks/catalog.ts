@@ -10,7 +10,7 @@ export const BLOCK_CATALOG: BlockDefinition[] = [
     inputPorts: [],
     paramsSchema: [
       { key: 'name', label: 'Display Name', type: 'string', default: 'My Source', placeholder: 'My Apple Source' },
-      { key: 'symbol', label: 'Ticker', type: 'string', default: 'SPY', placeholder: 'SPY' },
+      { key: 'symbol', label: 'Ticker(s)', type: 'string', default: 'SPY', placeholder: 'SPY or NVDA, AAPL, SPY' },
       { key: 'start', label: 'Start Date', type: 'string', default: '2020-01-01' },
       { key: 'end', label: 'End Date', type: 'string', default: '2024-01-01' },
       { key: 'interval', label: 'Interval', type: 'select', default: '1d', options: ['1d', '1wk', '1mo'] },

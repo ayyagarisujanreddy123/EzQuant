@@ -6,47 +6,83 @@ import pandas as pd
 import yfinance as yf
 
 
+def _parse_symbols(raw: str) -> list[str]:
+    """Split a 'NVDA, AAPL , SPY' string into a clean list of tickers."""
+    if not raw:
+        return []
+    return [s.strip().upper() for s in str(raw).replace(";", ",").split(",") if s.strip()]
+
+
 def universe(inputs: dict, params: dict) -> dict:
     """
-    Download OHLCV bars for a single ticker via yfinance.
+    Download OHLCV bars for one OR MANY tickers via yfinance.
 
-    Source block: ignores `inputs`. This is typically the first node in a
-    pipeline — it defines the "universe" of prices we're researching on.
+    Source block: ignores `inputs`. `params["symbol"]` may be a single ticker
+    ("NVDA") or a comma-separated list ("NVDA, AAPL, SPY"). For the multi-
+    ticker case the block returns the first ticker as the primary `df` and
+    attaches `metadata.per_ticker` — a dict of {ticker: DataFrame} — which the
+    pipeline runner uses to fork downstream execution per ticker.
     """
-    symbol = params["symbol"]
+    raw = params["symbol"]
     start = params["start"]
     end = params["end"]
     interval = params.get("interval", "1d")
 
-    df = yf.download(
-        symbol,
-        start=start,
-        end=end,
-        interval=interval,
-        auto_adjust=True,
-        progress=False,
-    )
-    if df.empty:
-        raise ValueError(f"yfinance returned no data for {symbol}")
+    symbols = _parse_symbols(raw)
+    if not symbols:
+        raise ValueError("universe: `symbol` is empty — provide at least one ticker")
 
-    # yfinance returns a MultiIndex on columns even for a single ticker in
-    # newer versions — flatten to simple column names.
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
+    per_ticker: dict[str, pd.DataFrame] = {}
+    failures: list[str] = []
 
-    df = df.dropna(how="all")
-    df.index = pd.DatetimeIndex(df.index)
-    df.index.name = "Date"
+    for sym in symbols:
+        try:
+            df = yf.download(
+                sym,
+                start=start,
+                end=end,
+                interval=interval,
+                auto_adjust=True,
+                progress=False,
+            )
+        except Exception as e:  # pragma: no cover - yfinance network errors
+            failures.append(f"{sym}: {e}")
+            continue
+        if df is None or df.empty:
+            failures.append(f"{sym}: empty response")
+            continue
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+        df = df.dropna(how="all")
+        df.index = pd.DatetimeIndex(df.index)
+        df.index.name = "Date"
+        per_ticker[sym] = df
+
+    if not per_ticker:
+        raise ValueError(
+            f"yfinance returned no data for any of {symbols}. "
+            f"Failures: {failures or '(unknown)'}"
+        )
+
+    primary_sym = next(iter(per_ticker.keys()))
+    primary_df = per_ticker[primary_sym]
 
     metadata = {
-        "symbol": symbol,
+        "symbol": primary_sym,
+        "symbols_requested": symbols,
+        "tickers": list(per_ticker.keys()),
         "start": start,
         "end": end,
-        "row_count": int(len(df)),
-        "nan_count_per_column": {c: int(df[c].isna().sum()) for c in df.columns},
-        "date_range": (str(df.index[0].date()), str(df.index[-1].date())),
+        "row_count": int(len(primary_df)),
+        "nan_count_per_column": {c: int(primary_df[c].isna().sum()) for c in primary_df.columns},
+        "date_range": (
+            str(primary_df.index[0].date()),
+            str(primary_df.index[-1].date()),
+        ),
+        "per_ticker": per_ticker if len(per_ticker) > 1 else None,
+        "failures": failures,
     }
-    return {"df": df, "metadata": metadata}
+    return {"df": primary_df, "metadata": metadata}
 
 
 def csv_upload(inputs: dict, params: dict) -> dict:
