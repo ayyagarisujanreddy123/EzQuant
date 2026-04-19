@@ -26,7 +26,7 @@ export function MessageBubble({ message }: { message: Message }) {
       <div className="flex items-center gap-1.5">
         <div className="w-1.5 h-1.5 rounded-full bg-eq-cyan" />
         <span className="text-[9px] uppercase tracking-wider text-eq-t3 font-mono">
-          Copilot
+          Bloom
         </span>
       </div>
       {message.toolCalls?.map((tc, i) => (
