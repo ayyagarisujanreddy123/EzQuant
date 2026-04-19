@@ -4,9 +4,7 @@ import type {
   Attachment,
 } from '@/types'
 import { createClient } from '@/lib/supabase/client'
-
-const BACKEND_URL =
-  process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8000'
+import { resolveBackendUrl } from './baseUrl'
 
 // Cap per-image payload so we don't blow the request body.
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024 // 4 MB raw; ~5.3 MB after base64
@@ -71,7 +69,7 @@ export async function* streamCopilotChat(
     attachments: preparedAttachments,
   }
 
-  const res = await fetch(`${BACKEND_URL}/api/agent/chat`, {
+  const res = await fetch(`${resolveBackendUrl()}/api/agent/chat`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
