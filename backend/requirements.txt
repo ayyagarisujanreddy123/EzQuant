@@ -12,9 +12,15 @@ pydantic-settings==2.6.0
 yfinance>=0.2.65
 curl_cffi>=0.7.0
 pandas==2.2.3
- 
+numpy>=1.26
+
+# --- Quant / stats ---
+scipy>=1.11
+statsmodels>=0.14
+
 # --- Caching ---
 cachetools==5.5.0
- 
+
 # --- Dev niceties ---
 python-dotenv==1.0.1
+pytest>=8.0
