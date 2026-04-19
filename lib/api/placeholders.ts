@@ -6,10 +6,10 @@ import type {
   PageContext,
   Attachment,
 } from '@/types'
-import { MOCK_PROJECTS } from '@/lib/mocks/mockProjects'
 import { MOCK_NVDA_GRAPH } from '@/lib/mocks/mockCanvasState'
+import { createClient } from '@/lib/supabase/client'
 
-// TODO: wire to POST /api/agent/chat SSE endpoint
+// ── Copilot (still mocked — TODO wire to POST /api/agent/chat SSE) ───────────
 export async function* streamCopilotChat(
   message: string,
   _pageContext: PageContext,
@@ -53,20 +53,108 @@ export async function* streamCopilotChat(
   yield { type: 'done' }
 }
 
-// TODO: wire to Supabase `projects` table
+// ── Projects (Supabase) ──────────────────────────────────────────────────────
+interface ProjectRow {
+  id: string
+  name: string
+  sharpe: number | null
+  block_count: number | null
+  status: string | null
+  updated_at: string
+  graph: PipelineGraph | null
+}
+
+function rowToProject(row: ProjectRow): Project {
+  const graph = row.graph ?? { nodes: [], edges: [] }
+  return {
+    id: row.id,
+    name: row.name,
+    sharpe: row.sharpe ?? 0,
+    blockCount: row.block_count ?? graph.nodes.length,
+    status: row.status === 'warning' ? 'warning' : 'healthy',
+    updatedAt: relativeTime(row.updated_at),
+    graph,
+  }
+}
+
+function relativeTime(iso: string): string {
+  const then = new Date(iso).getTime()
+  const diffMs = Date.now() - then
+  const mins = Math.floor(diffMs / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  const days = Math.floor(hrs / 24)
+  return `${days}d ago`
+}
+
 export async function fetchProjects(): Promise<Project[]> {
-  await delay(150)
-  return MOCK_PROJECTS
+  const sb = createClient()
+  const { data, error } = await sb
+    .from('projects')
+    .select('id, name, sharpe, block_count, status, updated_at, graph')
+    .order('updated_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []).map((r) => rowToProject(r as ProjectRow))
 }
 
-// TODO: wire to Supabase `projects` table
 export async function fetchProject(id: string): Promise<Project> {
-  await delay(150)
-  const p = MOCK_PROJECTS.find((p) => p.id === id) ?? MOCK_PROJECTS[3]
-  return { ...p, graph: p.graph ?? MOCK_NVDA_GRAPH }
+  const sb = createClient()
+  const { data, error } = await sb
+    .from('projects')
+    .select('id, name, sharpe, block_count, status, updated_at, graph')
+    .eq('id', id)
+    .single()
+  if (error) throw error
+  return rowToProject(data as ProjectRow)
 }
 
-// TODO: wire to POST /api/pipeline/run
+export async function createProject(input: {
+  name: string
+  graph?: PipelineGraph
+}): Promise<Project> {
+  const sb = createClient()
+  const { data: { user } } = await sb.auth.getUser()
+  if (!user) throw new Error('Not authenticated')
+
+  const graph = input.graph ?? { nodes: [], edges: [] }
+  const { data, error } = await sb
+    .from('projects')
+    .insert({
+      user_id: user.id,
+      name: input.name,
+      graph,
+      block_count: graph.nodes.length,
+      status: 'draft',
+    })
+    .select('id, name, sharpe, block_count, status, updated_at, graph')
+    .single()
+  if (error) throw error
+  return rowToProject(data as ProjectRow)
+}
+
+export async function saveProject(input: {
+  id: string
+  name?: string
+  graph: PipelineGraph
+}): Promise<Project> {
+  const sb = createClient()
+  const { data, error } = await sb
+    .from('projects')
+    .update({
+      ...(input.name !== undefined ? { name: input.name } : {}),
+      graph: input.graph,
+      block_count: input.graph.nodes.length,
+    })
+    .eq('id', input.id)
+    .select('id, name, sharpe, block_count, status, updated_at, graph')
+    .single()
+  if (error) throw error
+  return rowToProject(data as ProjectRow)
+}
+
+// ── Pipeline run (still mocked — TODO wire to POST /api/pipeline/run) ────────
 export async function runPipeline(graph: PipelineGraph): Promise<RunResult> {
   await delay(1800)
   return {
