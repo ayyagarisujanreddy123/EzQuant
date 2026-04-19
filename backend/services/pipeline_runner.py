@@ -51,7 +51,6 @@ CROSS_SECTIONAL_BLOCKS = {"signal_diagnostics"}
 STRETCH_BLOCKS = {
     "drop_na",
     "resample",
-    "z_score",
     "ems",
     "rolling_corr",
     "linear_reg",

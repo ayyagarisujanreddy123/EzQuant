@@ -48,6 +48,18 @@ export const BLOCK_CATALOG: BlockDefinition[] = [
       { key: 'horizon', label: 'Horizon', type: 'number', default: 1 },
     ],
   },
+  {
+    type: 'z_score',
+    category: 'clean',
+    label: 'Z-Score',
+    description:
+      'Rolling z-score: (x − rolling_mean) / rolling_std. Trailing window, NaN warm-up.',
+    inputPorts: ['df'],
+    paramsSchema: [
+      { key: 'column', label: 'Column', type: 'string', default: 'log_return' },
+      { key: 'window', label: 'Window', type: 'number', default: 20 },
+    ],
+  },
 
   // ─── Signal (features + signal-as-terminator + IC diagnostics) ────────────
   {
@@ -131,10 +143,6 @@ export const BLOCK_CATALOG: BlockDefinition[] = [
   {
     type: 'resample', category: 'clean', label: 'Resample', stretch: true, inputPorts: ['df'],
     paramsSchema: [{ key: 'freq', label: 'Frequency', type: 'select', default: '1D', options: ['1D', '1W', '1M'] }],
-  },
-  {
-    type: 'z_score', category: 'clean', label: 'Z-Score', stretch: true, inputPorts: ['df'],
-    paramsSchema: [{ key: 'window', label: 'Window', type: 'number', default: 20 }],
   },
   {
     type: 'ems', category: 'signal', label: 'EMS', stretch: true, inputPorts: ['df'],

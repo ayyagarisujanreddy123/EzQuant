@@ -2,26 +2,38 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { ChevronDown, ChevronUp } from 'lucide-react'
-import type { CanvasNode, NodeRunResult } from '@/types'
+import type { CanvasNode, NodeRunResult, BlockStatus } from '@/types'
 
 interface ConsoleEntry {
+  id: string
   ts: string
   level: 'ok' | 'warn' | 'err' | 'info'
   msg: string
 }
 
-const INITIAL_CONSOLE: ConsoleEntry[] = [
-  { ts: '14:22:01', level: 'info', msg: '✦ Copilot applied template: momentum_nvda' },
-  { ts: '14:22:01', level: 'info', msg: 'Pipeline loaded · 5 nodes · 6 edges' },
-  { ts: '14:22:02', level: 'warn', msg: '⚠ Potential lookahead in ema_1 — ask copilot' },
-  { ts: '14:22:02', level: 'ok', msg: 'Schema validated. Ready to run.' },
-]
+const MAX_CONSOLE_ENTRIES = 200
 
 const LEVEL_CLASS: Record<ConsoleEntry['level'], string> = {
   ok: 'text-eq-green',
   warn: 'text-eq-amber',
   err: 'text-eq-red',
   info: 'text-eq-blue',
+}
+
+function fmtTime(d: Date): string {
+  return d.toTimeString().slice(0, 8)
+}
+
+function fmtElapsed(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return '—'
+  if (ms < 1000) return `${ms.toFixed(0)}ms`
+  return `${(ms / 1000).toFixed(2)}s`
+}
+
+function nodeLabel(node: CanvasNode): string {
+  const name = (node.data.name || '').trim()
+  const type = node.data.blockType
+  return name && name !== type ? `${type} "${name}"` : type
 }
 
 // ─── Registry descriptor helpers ─────────────────────────────────────────────
@@ -162,6 +174,102 @@ export function BottomDrawer() {
   const { nodes } = useCanvasStore()
 
   const entries = useMemo<RegistryEntry[]>(() => buildRegistryEntries(nodes), [nodes])
+
+  // ── Console log driven by node-status transitions ─────────────────────────
+  //
+  // We keep a per-node snapshot of (status, startTime, errorMsg) so each render
+  // can diff against the current nodes and emit at most one console line per
+  // transition (running → success/error). Timing is measured client-side from
+  // the moment status flips to 'running'.
+  const [consoleEntries, setConsoleEntries] = useState<ConsoleEntry[]>([])
+  const prevStatusRef = useRef<Map<string, BlockStatus>>(new Map())
+  const startedAtRef = useRef<Map<string, number>>(new Map())
+  const consoleRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const prev = prevStatusRef.current
+    const starts = startedAtRef.current
+    const additions: ConsoleEntry[] = []
+    const now = () => new Date()
+    const currentIds = new Set<string>()
+
+    for (const node of nodes) {
+      const id = node.id
+      currentIds.add(id)
+      const status = node.data.status
+      const before = prev.get(id)
+      if (before === status) continue
+
+      if (status === 'running') {
+        starts.set(id, performance.now())
+      } else if (status === 'success' || status === 'error' || status === 'skipped') {
+        const startedAt = starts.get(id)
+        const elapsedMs = startedAt != null ? performance.now() - startedAt : NaN
+        starts.delete(id)
+        const label = nodeLabel(node)
+        const ts = fmtTime(now())
+        if (status === 'success') {
+          additions.push({
+            id: `${id}:${ts}:ok`,
+            ts,
+            level: 'ok',
+            msg: `✓ completed block ${label} — time: ${fmtElapsed(elapsedMs)}`,
+          })
+        } else if (status === 'error') {
+          const d = node.data as {
+            fetchError?: string
+            lastError?: string
+            error?: string
+            lastResult?: { error?: string }
+          }
+          const err =
+            d.fetchError ??
+            d.lastError ??
+            d.error ??
+            d.lastResult?.error ??
+            'unknown error'
+          additions.push({
+            id: `${id}:${ts}:err`,
+            ts,
+            level: 'err',
+            msg: `✗ block ${label} failed — time: ${fmtElapsed(elapsedMs)} · ${err}`,
+          })
+        } else {
+          additions.push({
+            id: `${id}:${ts}:skip`,
+            ts,
+            level: 'warn',
+            msg: `⤼ block ${label} skipped — upstream failure`,
+          })
+        }
+      }
+
+      prev.set(id, status)
+    }
+
+    // Forget state for deleted nodes so a recreated id doesn't replay stale transitions.
+    for (const id of Array.from(prev.keys())) {
+      if (!currentIds.has(id)) {
+        prev.delete(id)
+        starts.delete(id)
+      }
+    }
+
+    if (additions.length) {
+      setConsoleEntries((list) => {
+        const next = list.concat(additions)
+        if (next.length <= MAX_CONSOLE_ENTRIES) return next
+        return next.slice(next.length - MAX_CONSOLE_ENTRIES)
+      })
+    }
+  }, [nodes])
+
+  // Autoscroll console to the newest line.
+  useEffect(() => {
+    consoleRef.current?.scrollTo({ top: consoleRef.current.scrollHeight })
+  }, [consoleEntries.length])
+
+  const clearConsole = useCallback(() => setConsoleEntries([]), [])
 
   const drawerRef = useRef<HTMLDivElement>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -305,16 +413,37 @@ export function BottomDrawer() {
           />
 
           {/* Console pane */}
-          <div className="flex-1 p-2 overflow-y-auto">
+          <div ref={consoleRef} className="flex-1 p-2 overflow-y-auto">
             <div className="text-[10px] font-medium text-eq-t3 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
               <span className="text-eq-accent">›_</span> Console
+              {consoleEntries.length > 0 && (
+                <>
+                  <span className="ml-1 text-eq-t3 normal-case tracking-normal">
+                    · {consoleEntries.length}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={clearConsole}
+                    className="ml-auto text-eq-t3 hover:text-eq-t1 text-[9px] normal-case tracking-normal"
+                    title="Clear console"
+                  >
+                    clear
+                  </button>
+                </>
+              )}
             </div>
-            {INITIAL_CONSOLE.map((line, i) => (
-              <div key={i} className="flex gap-2 text-[10px] font-mono py-px">
-                <span className="text-eq-t3 flex-shrink-0">{line.ts}</span>
-                <span className={LEVEL_CLASS[line.level]}>{line.msg}</span>
+            {consoleEntries.length === 0 ? (
+              <div className="text-[9px] text-eq-t3 italic py-1">
+                (no block runs yet — hit Run or Evaluate)
               </div>
-            ))}
+            ) : (
+              consoleEntries.map((line) => (
+                <div key={line.id} className="flex gap-2 text-[10px] font-mono py-px">
+                  <span className="text-eq-t3 flex-shrink-0">{line.ts}</span>
+                  <span className={LEVEL_CLASS[line.level]}>{line.msg}</span>
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}

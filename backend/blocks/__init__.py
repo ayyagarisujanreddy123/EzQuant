@@ -11,13 +11,14 @@ from backend.blocks.features import ema, momentum
 from backend.blocks.position import position_sizer
 from backend.blocks.signal import signal, signal_diagnostics
 from backend.blocks.source import csv_upload, universe
-from backend.blocks.transforms import forward_return, log_returns
+from backend.blocks.transforms import forward_return, log_returns, z_score
 
 BLOCK_REGISTRY = {
     "universe": universe,
     "csv_upload": csv_upload,
     "log_returns": log_returns,
     "forward_return": forward_return,
+    "z_score": z_score,
     "ema": ema,
     "momentum": momentum,
     "signal": signal,
