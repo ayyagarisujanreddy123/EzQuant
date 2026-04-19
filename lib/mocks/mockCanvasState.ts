@@ -4,7 +4,7 @@ export const MOCK_NVDA_GRAPH: PipelineGraph = {
   nodes: [
     {
       id: 'n1',
-      type: 'ticker_source',
+      type: 'universe',
       position: { x: 40, y: 40 },
       data: {
         id: 'n1',
@@ -12,12 +12,12 @@ export const MOCK_NVDA_GRAPH: PipelineGraph = {
         category: 'data',
         status: 'idle',
         source: 'copilot',
-        blockType: 'ticker_source',
+        blockType: 'universe',
         params: {
           name: 'NVDA Source',
-          ticker: 'NVDA',
-          start_date: '2020-01-01',
-          end_date: '2024-01-01',
+          symbol: 'NVDA',
+          start: '2020-01-01',
+          end: '2024-01-01',
           interval: '1d',
         },
         quality: {
@@ -60,7 +60,7 @@ export const MOCK_NVDA_GRAPH: PipelineGraph = {
     },
     {
       id: 'n4',
-      type: 'threshold_signal',
+      type: 'position_sizer',
       position: { x: 400, y: 90 },
       data: {
         id: 'n4',
@@ -68,8 +68,8 @@ export const MOCK_NVDA_GRAPH: PipelineGraph = {
         category: 'model',
         status: 'idle',
         source: 'copilot',
-        blockType: 'threshold_signal',
-        params: { threshold: 0.0, direction: 'cross' },
+        blockType: 'position_sizer',
+        params: { mode: 'threshold', upper_threshold: 0, lower_threshold: 0 },
       },
     },
     {
@@ -100,7 +100,7 @@ export const MOCK_AAPL_GRAPH: PipelineGraph = {
   nodes: [
     {
       id: 'a1',
-      type: 'ticker_source',
+      type: 'universe',
       position: { x: 40, y: 60 },
       data: {
         id: 'a1',
@@ -108,12 +108,12 @@ export const MOCK_AAPL_GRAPH: PipelineGraph = {
         category: 'data',
         status: 'success',
         source: 'user',
-        blockType: 'ticker_source',
+        blockType: 'universe',
         params: {
           name: 'AAPL Source',
-          ticker: 'AAPL',
-          start_date: '2020-01-01',
-          end_date: '2024-01-01',
+          symbol: 'AAPL',
+          start: '2020-01-01',
+          end: '2024-01-01',
           interval: '1d',
         },
       },
@@ -148,7 +148,7 @@ export const MOCK_AAPL_GRAPH: PipelineGraph = {
     },
     {
       id: 'a4',
-      type: 'threshold_signal',
+      type: 'position_sizer',
       position: { x: 580, y: 60 },
       data: {
         id: 'a4',
@@ -156,8 +156,8 @@ export const MOCK_AAPL_GRAPH: PipelineGraph = {
         category: 'model',
         status: 'success',
         source: 'user',
-        blockType: 'threshold_signal',
-        params: { threshold: 0.0, direction: 'cross' },
+        blockType: 'position_sizer',
+        params: { mode: 'threshold', upper_threshold: 0, lower_threshold: 0 },
       },
     },
     {

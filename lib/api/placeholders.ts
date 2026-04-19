@@ -2,7 +2,6 @@ import type {
   CopilotEvent,
   Project,
   PipelineGraph,
-  RunResult,
   PageContext,
   Attachment,
 } from '@/types'
@@ -154,21 +153,8 @@ export async function saveProject(input: {
   return rowToProject(data as ProjectRow)
 }
 
-// ── Pipeline run (still mocked — TODO wire to POST /api/pipeline/run) ────────
-export async function runPipeline(graph: PipelineGraph): Promise<RunResult> {
-  await delay(1800)
-  return {
-    success: true,
-    metrics: {
-      sharpe: 1.67,
-      maxDrawdown: -0.18,
-      totalReturn: 0.84,
-      annualizedReturn: 0.21,
-      winRate: 0.54,
-    },
-    nodeStatuses: Object.fromEntries(graph.nodes.map((n) => [n.id, 'success' as const])),
-  }
-}
+// ── Pipeline run — real, wired to FastAPI /api/pipeline/run ──────────────────
+export { runPipeline, fetchRun } from './pipeline'
 
 function delay(ms: number) {
   return new Promise((r) => setTimeout(r, ms))

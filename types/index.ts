@@ -4,11 +4,18 @@ import type { Node, Edge } from '@xyflow/react'
 export type BlockCategory = 'data' | 'clean' | 'signal' | 'model' | 'eval'
 
 export type BlockType =
-  | 'ticker_source' | 'csv_upload'
-  | 'drop_na' | 'log_returns' | 'resample' | 'z_score'
-  | 'ema' | 'ems' | 'momentum' | 'rolling_corr'
-  | 'linear_reg' | 'threshold_signal'
-  | 'backtest' | 'equity_curve'
+  // MVP — each name matches backend/blocks/BLOCK_REGISTRY
+  | 'universe' | 'csv_upload'
+  | 'log_returns' | 'forward_return'
+  | 'ema' | 'momentum'
+  | 'signal' | 'signal_diagnostics'
+  | 'position_sizer'
+  | 'backtest'
+  // Stretch — frontend-only. BlockPalette renders ghosted; backend refuses
+  // to execute them at run time.
+  | 'drop_na' | 'resample' | 'z_score'
+  | 'ems' | 'rolling_corr' | 'linear_reg'
+  | 'equity_curve'
 
 export type BlockStatus = 'idle' | 'running' | 'success' | 'error' | 'skipped'
 
@@ -28,6 +35,8 @@ export interface BlockDefinition {
   description?: string
   stretch?: boolean
   paramsSchema: ParamSchema[]
+  /** Named input ports in the order the backend expects them. */
+  inputPorts: string[]
 }
 
 // ── Node Data ────────────────────────────────────────────────────────────────
@@ -41,11 +50,50 @@ export interface DataQuality {
 }
 
 export interface Metrics {
-  sharpe: number
-  maxDrawdown: number
-  totalReturn: number
-  annualizedReturn: number
+  sharpe?: number
+  maxDrawdown?: number
+  max_drawdown?: number
+  totalReturn?: number
+  total_return?: number
+  annualizedReturn?: number
   winRate?: number
+  hit_rate?: number
+  n_trades?: number
+  avg_holding_period?: number
+}
+
+/** signal_diagnostics output — surfaced in Inspector Eval tab. */
+export interface Diagnostics {
+  ic: number
+  ic_tstat: number
+  n: number
+  ic_decay: Record<string, number>           // {"1": 0.05, "5": 0.02, ...}
+  ic_stability: Record<string, number>       // {"2023-01": 0.08, ...}
+  signal_autocorr: number
+}
+
+/** Per-node result the backend ships back for Inspector to render. */
+export interface NodeRunResult {
+  node_id: string
+  status: BlockStatus
+  error?: string
+  df_preview?: { columns: string[]; rows: unknown[][]; shape: [number, number] }
+  shape?: [number, number]
+  quality?: DataQuality
+  metrics?: Metrics
+  diagnostics?: Diagnostics
+  metadata?: Record<string, unknown>
+}
+
+export interface RunResponse {
+  run_id?: string | null
+  status: 'running' | 'success' | 'error'
+  statuses: Record<string, BlockStatus>
+  node_results: Record<string, NodeRunResult>
+  errors: Record<string, string>
+  started_at: string
+  completed_at?: string
+  summary?: Record<string, unknown> | null
 }
 
 export interface NodeData extends Record<string, unknown> {
@@ -58,8 +106,10 @@ export interface NodeData extends Record<string, unknown> {
   params: Record<string, string | number | boolean>
   quality?: DataQuality
   metrics?: Metrics
+  diagnostics?: Diagnostics
   bars?: OhlcvBar[]
   fetchError?: string
+  lastResult?: NodeRunResult
 }
 
 export interface OhlcvBar {
@@ -74,6 +124,8 @@ export interface OhlcvBar {
 
 export interface EdgeData extends Record<string, unknown> {
   label?: string
+  /** Named input port on the target node (e.g. "signal_df"). Defaults to "df". */
+  targetPort?: string
 }
 
 export type CanvasNode = Node<NodeData, BlockType>

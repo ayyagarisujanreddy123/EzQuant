@@ -1,16 +1,18 @@
 import type { BlockDefinition, BlockCategory } from '@/types'
 
 export const BLOCK_CATALOG: BlockDefinition[] = [
-  // Data
+  // ─── Data (source blocks) ─────────────────────────────────────────────────
   {
-    type: 'ticker_source',
+    type: 'universe',
     category: 'data',
-    label: 'Ticker Source',
+    label: 'Universe',
+    description: 'Fetch OHLCV bars for a single ticker via yfinance.',
+    inputPorts: [],
     paramsSchema: [
       { key: 'name', label: 'Display Name', type: 'string', default: 'My Source', placeholder: 'My Apple Source' },
-      { key: 'ticker', label: 'Ticker', type: 'string', default: 'AAPL', placeholder: 'AAPL' },
-      { key: 'start_date', label: 'Start Date', type: 'string', default: '2020-01-01' },
-      { key: 'end_date', label: 'End Date', type: 'string', default: '2024-01-01' },
+      { key: 'symbol', label: 'Ticker', type: 'string', default: 'SPY', placeholder: 'SPY' },
+      { key: 'start', label: 'Start Date', type: 'string', default: '2020-01-01' },
+      { key: 'end', label: 'End Date', type: 'string', default: '2024-01-01' },
       { key: 'interval', label: 'Interval', type: 'select', default: '1d', options: ['1d', '1wk', '1mo'] },
     ],
   },
@@ -18,110 +20,143 @@ export const BLOCK_CATALOG: BlockDefinition[] = [
     type: 'csv_upload',
     category: 'data',
     label: 'CSV Upload',
+    description: 'Load a CSV with a date column. Demo-fallback when yfinance is rate-limited.',
+    inputPorts: [],
     paramsSchema: [
-      { key: 'filename', label: 'File', type: 'string', default: '', placeholder: 'data.csv' },
-      { key: 'date_col', label: 'Date Column', type: 'string', default: 'Date' },
-      { key: 'price_col', label: 'Price Column', type: 'string', default: 'Close' },
+      { key: 'file_path', label: 'File Path', type: 'string', default: '', placeholder: '/path/to/data.csv' },
+      { key: 'date_column', label: 'Date Column', type: 'string', default: 'Date' },
     ],
   },
-  // Clean
-  {
-    type: 'drop_na',
-    category: 'clean',
-    label: 'Drop NA',
-    paramsSchema: [
-      { key: 'axis', label: 'Axis', type: 'select', default: 'rows', options: ['rows', 'cols'] },
-    ],
-  },
+
+  // ─── Clean (transforms) ───────────────────────────────────────────────────
   {
     type: 'log_returns',
     category: 'clean',
     label: 'Log Returns',
-    paramsSchema: [
-      { key: 'col', label: 'Column', type: 'string', default: 'Close', placeholder: 'Close' },
-    ],
+    description: 'Add log(p_t / p_{t-1}) column.',
+    inputPorts: ['df'],
+    paramsSchema: [{ key: 'column', label: 'Column', type: 'string', default: 'Close' }],
   },
   {
-    type: 'resample',
+    type: 'forward_return',
     category: 'clean',
-    label: 'Resample',
+    label: 'Forward Return',
+    description: 'Prediction target — log(p_{t+h} / p_t).',
+    inputPorts: ['df'],
     paramsSchema: [
-      { key: 'freq', label: 'Frequency', type: 'select', default: '1D', options: ['1D', '1W', '1M'] },
+      { key: 'column', label: 'Column', type: 'string', default: 'Close' },
+      { key: 'horizon', label: 'Horizon', type: 'number', default: 1 },
     ],
   },
-  {
-    type: 'z_score',
-    category: 'clean',
-    label: 'Z-Score',
-    paramsSchema: [{ key: 'window', label: 'Window', type: 'number', default: 20 }],
-  },
-  // Signal
+
+  // ─── Signal (features + signal-as-terminator + IC diagnostics) ────────────
   {
     type: 'ema',
     category: 'signal',
     label: 'EMA',
-    paramsSchema: [{ key: 'span', label: 'Span', type: 'number', default: 20 }],
-  },
-  {
-    type: 'ems',
-    category: 'signal',
-    label: 'EMS',
+    description: 'Exponential moving average of a column.',
+    inputPorts: ['df'],
     paramsSchema: [
+      { key: 'column', label: 'Column', type: 'string', default: 'Close' },
       { key: 'span', label: 'Span', type: 'number', default: 20 },
-      { key: 'min_periods', label: 'Min Periods', type: 'number', default: 0 },
     ],
   },
   {
     type: 'momentum',
     category: 'signal',
     label: 'Momentum',
-    paramsSchema: [{ key: 'window', label: 'Window', type: 'number', default: 20 }],
+    description: 'price mode: p_t - p_{t-lookback}. return mode: rolling sum of returns.',
+    inputPorts: ['df'],
+    paramsSchema: [
+      { key: 'column', label: 'Column', type: 'string', default: 'Close' },
+      { key: 'lookback', label: 'Lookback', type: 'number', default: 20 },
+      { key: 'mode', label: 'Mode', type: 'select', default: 'price', options: ['price', 'return'] },
+    ],
   },
   {
-    type: 'rolling_corr',
+    type: 'signal',
     category: 'signal',
-    label: 'Rolling Corr',
+    label: 'Signal',
+    description: 'Pin a column as THE signal so downstream blocks can rely on df.signal.',
+    inputPorts: ['df'],
     paramsSchema: [
-      { key: 'window', label: 'Window', type: 'number', default: 30 },
-      { key: 'other_col', label: 'Other Column', type: 'string', default: 'spy', placeholder: 'spy' },
-    ],
-  },
-  // Model
-  {
-    type: 'linear_reg',
-    category: 'model',
-    label: 'Linear Reg',
-    paramsSchema: [
-      { key: 'target_col', label: 'Target Column', type: 'string', default: 'returns' },
-      { key: 'feature_cols', label: 'Feature Columns', type: 'string', default: 'ema,momentum' },
+      { key: 'column', label: 'Source Column', type: 'string', default: 'ema_20' },
+      { key: 'name', label: 'Signal Name', type: 'string', default: '', placeholder: 'EMA-20' },
     ],
   },
   {
-    type: 'threshold_signal',
-    category: 'model',
-    label: 'Threshold Sig',
+    type: 'signal_diagnostics',
+    category: 'signal',
+    label: 'Signal Diagnostics',
+    description: 'IC + decay + stability + t-stat. Gatekeeps the Backtest block.',
+    inputPorts: ['signal_df', 'forward_return_df'],
     paramsSchema: [
-      { key: 'threshold', label: 'Threshold', type: 'number', default: 0.0 },
-      { key: 'direction', label: 'Direction', type: 'select', default: 'cross', options: ['above', 'below', 'cross'] },
+      { key: 'ic_type', label: 'IC Type', type: 'select', default: 'spearman', options: ['spearman', 'pearson'] },
+      { key: 'forward_return_column', label: 'Forward Return Col', type: 'string', default: 'forward_return_1' },
     ],
   },
-  // Eval
+
+  // ─── Model (position sizing) ──────────────────────────────────────────────
+  {
+    type: 'position_sizer',
+    category: 'model',
+    label: 'Position Sizer',
+    description: 'Threshold a signal into {-1, 0, +1} positions.',
+    inputPorts: ['df'],
+    paramsSchema: [
+      { key: 'mode', label: 'Mode', type: 'select', default: 'threshold', options: ['threshold'] },
+      { key: 'upper_threshold', label: 'Upper Threshold', type: 'number', default: 0 },
+      { key: 'lower_threshold', label: 'Lower Threshold', type: 'number', default: 0 },
+    ],
+  },
+
+  // ─── Eval ─────────────────────────────────────────────────────────────────
   {
     type: 'backtest',
     category: 'eval',
     label: 'Backtest',
+    description: 'Lookahead-guarded pnl = position_{t-1} * return_t. Sharpe, drawdown, hit rate.',
+    inputPorts: ['df'],
     paramsSchema: [
+      { key: 'return_column', label: 'Return Column', type: 'string', default: 'log_return' },
       { key: 'cost_bps', label: 'Cost (bps)', type: 'number', default: 1 },
-      { key: 'initial_capital', label: 'Initial Capital', type: 'number', default: 100000 },
+    ],
+  },
+
+  // ─── Stretch (rendered ghosted; backend refuses to execute) ───────────────
+  {
+    type: 'drop_na', category: 'clean', label: 'Drop NA', stretch: true, inputPorts: ['df'],
+    paramsSchema: [{ key: 'axis', label: 'Axis', type: 'select', default: 'rows', options: ['rows', 'cols'] }],
+  },
+  {
+    type: 'resample', category: 'clean', label: 'Resample', stretch: true, inputPorts: ['df'],
+    paramsSchema: [{ key: 'freq', label: 'Frequency', type: 'select', default: '1D', options: ['1D', '1W', '1M'] }],
+  },
+  {
+    type: 'z_score', category: 'clean', label: 'Z-Score', stretch: true, inputPorts: ['df'],
+    paramsSchema: [{ key: 'window', label: 'Window', type: 'number', default: 20 }],
+  },
+  {
+    type: 'ems', category: 'signal', label: 'EMS', stretch: true, inputPorts: ['df'],
+    paramsSchema: [{ key: 'span', label: 'Span', type: 'number', default: 20 }],
+  },
+  {
+    type: 'rolling_corr', category: 'signal', label: 'Rolling Corr', stretch: true, inputPorts: ['df'],
+    paramsSchema: [
+      { key: 'window', label: 'Window', type: 'number', default: 30 },
+      { key: 'other_col', label: 'Other Column', type: 'string', default: 'spy' },
     ],
   },
   {
-    type: 'equity_curve',
-    category: 'eval',
-    label: 'Equity Curve',
+    type: 'linear_reg', category: 'model', label: 'Linear Reg', stretch: true, inputPorts: ['df'],
     paramsSchema: [
-      { key: 'benchmark', label: 'Benchmark', type: 'string', default: '', placeholder: 'SPY (optional)' },
+      { key: 'target_col', label: 'Target Column', type: 'string', default: 'forward_return_1' },
+      { key: 'feature_cols', label: 'Feature Columns', type: 'string', default: 'ema_20,momentum_20' },
     ],
+  },
+  {
+    type: 'equity_curve', category: 'eval', label: 'Equity Curve', stretch: true, inputPorts: ['df'],
+    paramsSchema: [{ key: 'benchmark', label: 'Benchmark', type: 'string', default: '', placeholder: 'SPY (optional)' }],
   },
 ]
 
@@ -144,3 +179,7 @@ export const CATEGORY_SECTIONS: { category: BlockCategory; label: string }[] = [
   { category: 'model', label: 'Model' },
   { category: 'eval', label: 'Evaluate' },
 ]
+
+export const EXECUTABLE_BLOCK_TYPES: Set<string> = new Set(
+  BLOCK_CATALOG.filter((b) => !b.stretch).map((b) => b.type)
+)
