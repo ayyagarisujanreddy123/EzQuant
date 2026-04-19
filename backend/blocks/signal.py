@@ -18,8 +18,16 @@ def signal(inputs: dict, params: dict) -> dict:
     choice so every downstream block can rely on df['signal'] existing.
     """
     df = inputs["df"].copy()
-    column = params["column"]
-    name = params.get("name", column)
+    column = params.get("column")
+    if not column:
+        # Fall back to any ema_* / momentum_* column if the user didn't set one.
+        candidates = [c for c in df.columns if c.startswith(("ema_", "momentum_"))]
+        if not candidates:
+            raise ValueError(
+                f"signal: no 'column' param and no ema_* / momentum_* column found in {list(df.columns)}"
+            )
+        column = candidates[0]
+    name = params.get("name") or column
     if column not in df.columns:
         raise ValueError(f"Column {column!r} not in DataFrame {list(df.columns)}")
     df["signal"] = df[column]

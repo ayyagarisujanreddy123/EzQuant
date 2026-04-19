@@ -11,7 +11,7 @@ def ema(inputs: dict, params: dict) -> dict:
     the building block for EMA crossovers and momentum variants.
     """
     df = inputs["df"].copy()
-    column = params["column"]
+    column = params.get("column", "Close")
     span = int(params.get("span", 20))
     if column not in df.columns:
         raise ValueError(f"Column {column!r} not in DataFrame {list(df.columns)}")
