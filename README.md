@@ -1,4 +1,8 @@
-# SignalTracer
+<p align="center">
+  <img width="720" alt="SignalTrace" src="https://github.com/user-attachments/assets/f82f6a05-96c0-4de5-920a-e8f674ed92ae">
+</p>
+
+
 
 > **Visual quant research — trace every signal from data to backtest.**
 >
