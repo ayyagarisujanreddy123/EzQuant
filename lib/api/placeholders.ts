@@ -1,20 +1,17 @@
-import type { Project, PipelineGraph } from '@/types'
+import type {
+  Project,
+  PipelineGraph,
+} from '@/types'
 import { MOCK_NVDA_GRAPH } from '@/lib/mocks/mockCanvasState'
-import { resolveBackendUrl } from './baseUrl'
-import { readUser } from '@/lib/user'
+import { createClient } from '@/lib/supabase/client'
 
-// ── Copilot — real SSE stream via backend ──────────────────────────────────
+// ── Copilot — real SSE stream via backend (replaces the prior mock) ─────────
 export { streamCopilotChat } from './copilot'
 
 // Reference kept so the import stays live for any future fallback.
 void MOCK_NVDA_GRAPH
 
-// ── Projects — proxied through FastAPI /api/simple/projects ────────────────
-//
-// Simple-identity mode: every call sends the localStorage `user_id` to the
-// backend, which uses the Supabase service-role key to insert / fetch rows
-// filtered by that id. No Supabase session, no RLS, no JWT.
-
+// ── Projects (Supabase) ──────────────────────────────────────────────────────
 interface ProjectRow {
   id: string
   name: string
@@ -50,71 +47,55 @@ function relativeTime(iso: string): string {
   return `${days}d ago`
 }
 
-function requireUserId(): string {
-  const u = readUser()
-  if (!u) throw new Error('No user — open /enter to set name + DOB')
-  return u.id
-}
-
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${resolveBackendUrl()}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
-  })
-  if (!res.ok) {
-    let detail = `HTTP ${res.status}`
-    try {
-      const body = await res.json()
-      detail = body.detail ?? body.error ?? detail
-    } catch {
-      /* ignore */
-    }
-    throw new Error(detail)
-  }
-  return (await res.json()) as T
-}
-
 export async function fetchProjects(): Promise<Project[]> {
-  const user_id = requireUserId()
-  const body = await request<{ projects: ProjectRow[] }>(
-    `/api/simple/projects?user_id=${encodeURIComponent(user_id)}`
-  )
-  return (body.projects ?? []).map(rowToProject)
+  const sb = createClient()
+  const { data, error } = await sb
+    .from('projects')
+    .select('id, name, sharpe, block_count, status, updated_at, graph')
+    .order('updated_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []).map((r) => rowToProject(r as ProjectRow))
 }
 
 export async function fetchProject(id: string): Promise<Project> {
-  const user_id = requireUserId()
-  const row = await request<ProjectRow>(
-    `/api/simple/projects/${encodeURIComponent(id)}?user_id=${encodeURIComponent(user_id)}`
-  )
-  return rowToProject(row)
+  const sb = createClient()
+  const { data, error } = await sb
+    .from('projects')
+    .select('id, name, sharpe, block_count, status, updated_at, graph')
+    .eq('id', id)
+    .single()
+  if (error) throw error
+  return rowToProject(data as ProjectRow)
 }
 
 export async function createProject(input: {
   name: string
   graph?: PipelineGraph
 }): Promise<Project> {
-  const user_id = requireUserId()
-  const row = await request<ProjectRow>('/api/simple/projects', {
-    method: 'POST',
-    body: JSON.stringify({
-      user_id,
+  const sb = createClient()
+  const { data: { user } } = await sb.auth.getUser()
+  if (!user) throw new Error('Not authenticated')
+
+  const graph = input.graph ?? { nodes: [], edges: [] }
+  const { data, error } = await sb
+    .from('projects')
+    .insert({
+      user_id: user.id,
       name: input.name,
-      graph: input.graph ?? { nodes: [], edges: [] },
-    }),
-  })
-  return rowToProject(row)
+      graph,
+      block_count: graph.nodes.length,
+      status: 'draft',
+    })
+    .select('id, name, sharpe, block_count, status, updated_at, graph')
+    .single()
+  if (error) throw error
+  return rowToProject(data as ProjectRow)
 }
 
 export async function deleteProject(id: string): Promise<void> {
-  const user_id = requireUserId()
-  await request<{ ok: boolean }>(
-    `/api/simple/projects/${encodeURIComponent(id)}?user_id=${encodeURIComponent(user_id)}`,
-    { method: 'DELETE' }
-  )
+  const sb = createClient()
+  const { error } = await sb.from('projects').delete().eq('id', id)
+  if (error) throw error
 }
 
 export async function saveProject(input: {
@@ -122,20 +103,24 @@ export async function saveProject(input: {
   name?: string
   graph: PipelineGraph
 }): Promise<Project> {
-  const user_id = requireUserId()
-  const row = await request<ProjectRow>(
-    `/api/simple/projects/${encodeURIComponent(input.id)}`,
-    {
-      method: 'PATCH',
-      body: JSON.stringify({
-        user_id,
-        name: input.name,
-        graph: input.graph,
-      }),
-    }
-  )
-  return rowToProject(row)
+  const sb = createClient()
+  const { data, error } = await sb
+    .from('projects')
+    .update({
+      ...(input.name !== undefined ? { name: input.name } : {}),
+      graph: input.graph,
+      block_count: input.graph.nodes.length,
+    })
+    .eq('id', input.id)
+    .select('id, name, sharpe, block_count, status, updated_at, graph')
+    .single()
+  if (error) throw error
+  return rowToProject(data as ProjectRow)
 }
 
-// ── Pipeline run — real, wired to FastAPI /api/pipeline/run ────────────────
+// ── Pipeline run — real, wired to FastAPI /api/pipeline/run ──────────────────
 export { runPipeline, fetchRun } from './pipeline'
+
+function delay(ms: number) {
+  return new Promise((r) => setTimeout(r, ms))
+}

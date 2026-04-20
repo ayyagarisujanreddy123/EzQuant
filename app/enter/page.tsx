@@ -1,11 +1,32 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Sparkles, Loader2, ArrowRight } from 'lucide-react'
 import { deriveUserId, readUser, writeUser } from '@/lib/user'
 import { resolveBackendUrl } from '@/lib/api/baseUrl'
 
+// Next.js 16 bails out of static prerender for any client component that
+// reads useSearchParams — wrap the form in <Suspense> so the page shell can
+// still be prerendered.
 export default function EnterPage() {
+  return (
+    <Suspense fallback={<EnterShell />}>
+      <EnterForm />
+    </Suspense>
+  )
+}
+
+function EnterShell() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-bg-0 p-6">
+      <div className="w-full max-w-sm bg-bg-1 border border-eq-border rounded-xl p-7">
+        <Loader2 className="animate-spin text-eq-cyan mx-auto" size={18} />
+      </div>
+    </div>
+  )
+}
+
+function EnterForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const next = searchParams.get('next') ?? '/projects'
