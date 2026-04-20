@@ -15,6 +15,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
@@ -32,6 +33,12 @@ logger = logging.getLogger(__name__)
 MAX_TOOL_TURNS = 5
 HISTORY_LIMIT = 20          # prior turns loaded into Gemini chat per new message
 HISTORY_MAX_CHARS = 2000    # truncate any single prior turn to this many chars
+
+# Copilot persistence touches Supabase. When the DB is unreachable (Cloudflare
+# 522, connection timeout, etc.) the httpx POST blocks every chat turn for
+# 30-60s before the try/except fires. Off by default; set COPILOT_PERSIST=1
+# in env to re-enable once the DB is healthy again.
+_PERSIST_ENABLED = os.getenv("COPILOT_PERSIST", "0") not in {"", "0", "false", "False"}
 
 SAFETY_SETTINGS = {
     HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
@@ -318,6 +325,8 @@ def _load_session_history(
     calls from the replay (the model regenerates those as needed) and cap each
     message so a long history doesn't blow the context window.
     """
+    if not _PERSIST_ENABLED:
+        return []
     sb = get_service_client()
     if sb is None or not session_id:
         return []
@@ -368,6 +377,8 @@ def _persist_message(
     citations: Optional[List[Dict[str, Any]]] = None,
     attachments: Optional[List[Dict[str, Any]]] = None,
 ) -> None:
+    if not _PERSIST_ENABLED:
+        return
     sb = get_service_client()
     if sb is None:
         return

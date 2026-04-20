@@ -90,19 +90,29 @@ def _verify_token(token: str) -> dict:
     raise HTTPException(status_code=401, detail=f"Unsupported JWT alg: {alg!r}")
 
 
+# Stable anon UUID used when auth is disabled (simple-identity mode). The
+# backend accepts any request, using this id when no valid Bearer token is
+# present so downstream callers keep their `user_id: str` contract.
+ANON_USER_ID = "00000000-0000-0000-0000-000000000000"
+
+
 def verify_jwt(authorization: Optional[str] = Header(default=None)) -> str:
-    """Return Supabase user id (uuid string) from a valid Bearer token."""
-    if not authorization or not authorization.lower().startswith("bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or malformed Authorization header (expected 'Bearer <token>').",
-        )
-    token = authorization.split(" ", 1)[1].strip()
-    decoded = _verify_token(token)
-    user_id = decoded.get("sub")
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Token missing 'sub' claim")
-    return user_id
+    """
+    AUTH DISABLED (simple-identity mode). If a valid JWT is present, honour
+    it; otherwise return the anon user id so the rest of the backend still
+    gets a string without 401-ing.
+    """
+    _ = status  # keep the import live for the restored version
+    if authorization and authorization.lower().startswith("bearer "):
+        token = authorization.split(" ", 1)[1].strip()
+        try:
+            decoded = _verify_token(token)
+            user_id = decoded.get("sub")
+            if user_id:
+                return str(user_id)
+        except HTTPException:
+            pass
+    return ANON_USER_ID
 
 
 def optional_verify_jwt(authorization: Optional[str] = Header(default=None)) -> Optional[str]:

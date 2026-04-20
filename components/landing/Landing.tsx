@@ -48,13 +48,13 @@ function LandingNav() {
 
       <div className="ml-auto flex items-center gap-2">
         <Link
-          href="/auth/login"
+          href="/enter"
           className="px-3.5 py-1.5 rounded-md text-[12px] font-medium text-eq-t2 hover:text-eq-t1 hover:bg-bg-3 border border-transparent hover:border-eq-border-2 transition-colors"
         >
           Login
         </Link>
         <Link
-          href="/auth/signup"
+          href="/enter"
           className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-[12px] font-medium bg-eq-accent text-white hover:bg-eq-accent-2 transition-colors"
         >
           Sign up
@@ -108,14 +108,14 @@ function Hero() {
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
           <Link
-            href="/auth/signup"
+            href="/enter"
             className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-gemini text-white text-[14px] font-medium hover:scale-[1.02] active:scale-[0.98] transition-transform shadow-lg shadow-eq-accent/30"
           >
             <Sparkles size={14} />
             Create free account
           </Link>
           <Link
-            href="/auth/login"
+            href="/enter"
             className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-bg-2 text-eq-t1 text-[14px] font-medium border border-eq-border-2 hover:bg-bg-3 hover:border-eq-accent/50 transition-colors"
           >
             Sign in
@@ -366,7 +366,7 @@ function CanvasPreview() {
 
         <div className="mt-10 text-center">
           <Link
-            href="/auth/signup"
+            href="/enter"
             className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-gemini text-white text-[14px] font-medium hover:scale-[1.02] active:scale-[0.98] transition-transform shadow-lg shadow-eq-accent/30"
           >
             Try it free
@@ -434,10 +434,10 @@ function Footer() {
           >
             GitHub
           </a>
-          <Link href="/auth/login" className="hover:text-eq-t1 transition-colors">
+          <Link href="/enter" className="hover:text-eq-t1 transition-colors">
             Sign in
           </Link>
-          <Link href="/auth/signup" className="hover:text-eq-t1 transition-colors">
+          <Link href="/enter" className="hover:text-eq-t1 transition-colors">
             Sign up
           </Link>
           <span className="text-eq-t3">© 2026</span>
