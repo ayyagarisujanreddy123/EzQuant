@@ -4,10 +4,7 @@ import type {
   PipelineGraph,
   RunResponse,
 } from '@/types'
-import { createClient } from '@/lib/supabase/client'
-
-const BACKEND_URL =
-  process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8000'
+import { resolveBackendUrl } from './baseUrl'
 
 interface RunOptions {
   projectId?: string | null
@@ -21,9 +18,6 @@ export async function runPipeline(
   graph: PipelineGraph,
   options: RunOptions = {}
 ): Promise<RunResponse> {
-  const token = await getAccessToken()
-  if (!token) throw new Error('Not signed in — cannot run pipeline.')
-
   const body = {
     pipeline: {
       nodes: graph.nodes.map(serializeNode),
@@ -34,12 +28,9 @@ export async function runPipeline(
     persist: options.persist ?? true,
   }
 
-  const res = await fetch(`${BACKEND_URL}/api/pipeline/run`, {
+  const res = await fetch(`${resolveBackendUrl()}/api/pipeline/run`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
 
@@ -51,23 +42,12 @@ export async function runPipeline(
 }
 
 export async function fetchRun(runId: string): Promise<RunResponse> {
-  const token = await getAccessToken()
-  if (!token) throw new Error('Not signed in.')
-
-  const res = await fetch(`${BACKEND_URL}/api/pipeline/runs/${runId}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
+  const res = await fetch(`${resolveBackendUrl()}/api/pipeline/runs/${runId}`)
   if (!res.ok) throw new Error(await safeErrorDetail(res))
   return res.json()
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
-
-async function getAccessToken(): Promise<string | null> {
-  const sb = createClient()
-  const { data } = await sb.auth.getSession()
-  return data.session?.access_token ?? null
-}
 
 async function safeErrorDetail(res: Response): Promise<string> {
   try {

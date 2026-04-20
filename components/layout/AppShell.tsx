@@ -1,9 +1,9 @@
 'use client'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { LogOut } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
+import { clearUser, readUser } from '@/lib/user'
 
 const TABS = [
   { label: 'Projects', href: '/projects' },
@@ -13,14 +13,20 @@ const TABS = [
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const [email, setEmail] = useState<string | null>(null)
+  const router = useRouter()
+  const [fullName, setFullName] = useState<string | null>(null)
 
+  // Client-side identity guard. No user in localStorage → send them to the
+  // name+DOB entry form with a `next` hop back to where they were heading.
   useEffect(() => {
-    const supabase = createClient()
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      setEmail(user?.email ?? null)
-    })
-  }, [])
+    const u = readUser()
+    if (!u) {
+      const target = '/enter?next=' + encodeURIComponent(pathname || '/projects')
+      router.replace(target)
+      return
+    }
+    setFullName(u.fullName)
+  }, [pathname, router])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -66,24 +72,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <div className="w-1.5 h-1.5 rounded-full bg-eq-cyan" />
             Bloom
           </button>
-          {email && (
+          {fullName && (
             <span
               className="text-[10px] font-mono text-eq-t3 max-w-[140px] truncate"
-              title={email}
+              title={fullName}
             >
-              {email}
+              {fullName}
             </span>
           )}
-          <form action="/auth/logout" method="POST">
-            <button
-              type="submit"
-              title="Sign out"
-              className="flex items-center gap-1 px-2 py-1 bg-bg-2 text-eq-t2 border border-eq-border hover:bg-eq-red-dim hover:text-eq-red hover:border-eq-red/30 rounded-md text-[11px] font-medium transition-colors"
-            >
-              <LogOut size={11} />
-              Sign out
-            </button>
-          </form>
+          <button
+            type="button"
+            onClick={() => {
+              clearUser()
+              router.replace('/enter')
+            }}
+            title="Forget this device"
+            className="flex items-center gap-1 px-2 py-1 bg-bg-2 text-eq-t2 border border-eq-border hover:bg-eq-red-dim hover:text-eq-red hover:border-eq-red/30 rounded-md text-[11px] font-medium transition-colors"
+          >
+            <LogOut size={11} />
+            Switch user
+          </button>
         </div>
       </nav>
       <main className="flex-1 overflow-hidden">{children}</main>

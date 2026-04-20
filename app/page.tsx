@@ -1,13 +1,8 @@
-import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
 import { Landing } from '@/components/landing/Landing'
 
-export default async function Home() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (user) redirect('/projects')
+// Simple-identity mode — the landing is public. Identity (full name + DOB) is
+// collected on /enter and persisted in localStorage; AppShell redirects
+// anonymous visitors to /enter when they try to access app pages.
+export default function Home() {
   return <Landing />
 }
